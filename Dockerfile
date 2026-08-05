@@ -10,14 +10,12 @@ RUN apk add --no-cache git curl nodejs npm icu-dev libzip-dev libxml2-dev onigur
 WORKDIR /var/www/html
 
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
-
 COPY package.json package-lock.json ./
-RUN npm ci
-
 COPY . .
 
-RUN npm run build
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist \
+    && npm ci \
+    && npm run build
 RUN cp .env.example .env && php artisan key:generate --force
 
 EXPOSE 8000
