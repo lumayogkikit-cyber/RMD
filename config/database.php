@@ -3,6 +3,36 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+$dbUrl = env('MYSQL_URL') ?: env('DATABASE_URL') ?: env('DB_URL');
+$dbUrlParsed = $dbUrl ? parse_url($dbUrl) : [];
+
+$mysqlUrl = $dbUrl;
+$mysqlHost = $dbUrlParsed['host'] ?? env('DB_HOST', env('MYSQL_HOST', env('MYSQLHOST', env('RAILWAY_MYSQL_HOST', '127.0.0.1'))));
+$mysqlPort = $dbUrlParsed['port'] ?? env('DB_PORT', env('MYSQL_PORT', env('MYSQLPORT', env('RAILWAY_MYSQL_PORT', '3306'))));
+$mysqlDatabase = isset($dbUrlParsed['path']) ? ltrim($dbUrlParsed['path'], '/') : env('DB_DATABASE', env('MYSQL_DATABASE', env('MYSQLDATABASE', env('RAILWAY_MYSQL_DATABASE', 'laravel'))));
+$mysqlUsername = $dbUrlParsed['user'] ?? env('DB_USERNAME', env('MYSQL_USER', env('MYSQLUSER', env('RAILWAY_MYSQL_USER', 'root'))));
+$mysqlPassword = $dbUrlParsed['pass'] ?? env('DB_PASSWORD', env('MYSQL_PASSWORD', env('MYSQLPASSWORD', env('RAILWAY_MYSQL_PASSWORD', ''))));
+
+if (is_string($mysqlHost) && preg_match('/^\$\{([^}]+)\}$/', $mysqlHost, $matches) && env($matches[1]) !== null) {
+    $mysqlHost = env($matches[1]);
+}
+
+if (is_string($mysqlPort) && preg_match('/^\$\{([^}]+)\}$/', $mysqlPort, $matches) && env($matches[1]) !== null) {
+    $mysqlPort = env($matches[1]);
+}
+
+if (is_string($mysqlDatabase) && preg_match('/^\$\{([^}]+)\}$/', $mysqlDatabase, $matches) && env($matches[1]) !== null) {
+    $mysqlDatabase = env($matches[1]);
+}
+
+if (is_string($mysqlUsername) && preg_match('/^\$\{([^}]+)\}$/', $mysqlUsername, $matches) && env($matches[1]) !== null) {
+    $mysqlUsername = env($matches[1]);
+}
+
+if (is_string($mysqlPassword) && preg_match('/^\$\{([^}]+)\}$/', $mysqlPassword, $matches) && env($matches[1]) !== null) {
+    $mysqlPassword = env($matches[1]);
+}
+
 return [
 
     /*
@@ -17,7 +47,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', env('DATABASE_URL') ? 'pgsql' : 'sqlite'),
+    'default' => env('DB_CONNECTION', 'mysql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -46,12 +76,12 @@ return [
 
         'mysql' => [
             'driver' => 'mysql',
-            'url' => env('DB_URL', env('DATABASE_URL')),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
-            'password' => env('DB_PASSWORD', ''),
+            'url' => $mysqlUrl,
+            'host' => $mysqlHost,
+            'port' => $mysqlPort,
+            'database' => $mysqlDatabase,
+            'username' => $mysqlUsername,
+            'password' => $mysqlPassword,
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
