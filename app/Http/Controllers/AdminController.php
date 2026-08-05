@@ -1,0 +1,394 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PriceMatrix;
+use App\Models\Category;
+use App\Models\Supplier;
+use App\Models\User;
+use App\Models\AuditLog;
+use App\Models\TruckLoad;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+
+class AdminController extends Controller
+{
+    /**
+     * Super Admin Master Dashboard
+     */
+    public function dashboard()
+    {
+        // Hard purge Lauan and Yemane records from database
+        PriceMatrix::whereIn('category', ['LAUAN', 'YEMANE', 'Lauan', 'Yemane', 'lauan', 'yemane'])->delete();
+
+        $staffUsers = User::orderBy('name')->get();
+        $suppliers = Supplier::orderBy('name')->get();
+        $priceMatrices = PriceMatrix::all();
+        $auditLogs = AuditLog::latest()->take(25)->get();
+        $completedLoads = TruckLoad::with('supplier')->latest()->paginate(10);
+
+        return view('admin.dashboard', compact(
+            'staffUsers',
+            'suppliers',
+            'priceMatrices',
+            'auditLogs',
+            'completedLoads'
+        ));
+    }
+
+    public function prices()
+    {
+        $priceMatrices = PriceMatrix::whereIn('category', ['FALCATA', 'SAWMILL'])
+            ->orderBy('dia_min', 'asc')
+            ->orderBy('length', 'asc')
+            ->get();
+
+        $categories = Category::orderBy('name')->get();
+
+        return view('admin.prices', compact('priceMatrices', 'categories'));
+    }
+
+    /**
+     * Store a new dynamic category
+     */
+    public function storeCategory(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|unique:categories,name|max:255',
+        ]);
+
+        Category::create(['name' => $request->name]);
+
+        // Invalidate cached categories and price matrix
+        Cache::forget('active_price_categories');
+        Cache::forget('active_price_matrix');
+
+        return back()->with('success', 'New Category added successfully!');
+    }
+
+    /**
+     * Update an existing category and propagate to price_matrices
+     */
+    public function updateCategory(Request $request, Category $category)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255|unique:categories,name,' . $category->id,
+        ]);
+
+        $oldName = $category->name;
+        $category->update(['name' => $request->name]);
+
+        // Update related price matrix entries to use new category name
+        PriceMatrix::where('category', $oldName)->update(['category' => $request->name]);
+
+        Cache::forget('active_price_categories');
+        Cache::forget('active_price_matrix');
+
+        return back()->with('success', 'Category updated successfully!');
+    }
+
+    /**
+     * Delete a category (and optionally orphaned price rows)
+     */
+    public function destroyCategory(Request $request, Category $category)
+    {
+        $count = PriceMatrix::where('category', $category->name)->count();
+        if ($count > 0) {
+            return back()->with('error', 'Category cannot be deleted because there are ' . $count . ' price matrix rows referencing it. Please delete or reassign those rows first.');
+        }
+
+        $category->delete();
+
+        Cache::forget('active_price_categories');
+        Cache::forget('active_price_matrix');
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Category Deleted',
+            'details' => "Deleted category {$category->name}",
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', 'Category deleted successfully.');
+    }
+
+    /**
+     * JSON endpoint for active price matrix (cached)
+     */
+    public function apiPriceMatrix()
+    {
+        $data = Cache::remember('active_price_matrix', 3600, function () {
+            return PriceMatrix::orderBy('category')->orderBy('dia_min')->orderBy('length')->get();
+        });
+
+        return response()->json($data);
+    }
+
+    /**
+     * Update Dynamic Price Matrix
+     */
+    public function updatePriceMatrix(Request $request)
+    {
+        $validated = $request->validate([
+            'prices' => 'required|array',
+            'prices.*.id' => 'required|exists:price_matrices,id',
+            'prices.*.price' => 'required|numeric|min:0',
+        ]);
+
+        foreach ($validated['prices'] as $item) {
+            $pm = PriceMatrix::find($item['id']);
+            if ($pm) {
+                $pm->price_per_cu_m = $item['price'];
+                $pm->save();
+            }
+        }
+
+        // Ensure scalers pick up new rates immediately
+        Cache::forget('active_price_matrix');
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Price Matrix Updated',
+            'details' => 'Super Admin updated global wood pricing rates.',
+            'ip_address' => $request->ip(),
+        ]);
+
+        return redirect()->route('admin.dashboard')->with('success', 'Dynamic Price Matrix updated successfully!');
+    }
+
+    /**
+     * Add a new price matrix row for a category/length/diameter bracket
+     */
+    public function addPriceMatrixRow(Request $request)
+    {
+        $validated = $request->validate([
+            'category' => 'required|string|max:50',
+            'length' => 'required|numeric|min:0.01',
+            'dia_min' => 'required|integer|min:0',
+            'dia_max' => 'required|integer|min:0|gte:dia_min',
+            'price_per_cu_m' => 'required|numeric|min:0',
+        ]);
+
+        PriceMatrix::create([
+            'category' => strtoupper(trim($validated['category'])),
+            'length' => $validated['length'],
+            'dia_min' => $validated['dia_min'],
+            'dia_max' => $validated['dia_max'],
+            'price_per_cu_m' => $validated['price_per_cu_m'],
+        ]);
+
+        // Ensure scalers pick up new rates immediately
+        Cache::forget('active_price_matrix');
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Price Matrix Row Added',
+            'details' => sprintf('Super Admin added new category rate: %s %.3fm, %d-%d cm, ₱%.3f.',
+                strtoupper(trim($validated['category'])),
+                $validated['length'],
+                $validated['dia_min'],
+                $validated['dia_max'],
+                $validated['price_per_cu_m']
+            ),
+            'ip_address' => $request->ip(),
+        ]);
+
+        return redirect()->route('admin.dashboard')->with('success', 'New price matrix row added successfully!');
+    }
+
+    public function destroyPriceMatrixRow(Request $request, PriceMatrix $priceMatrix = null)
+    {
+        if ($priceMatrix) {
+            $details = sprintf('Deleted price matrix row: %s %.3fm, %d-%d cm, ₱%.3f.',
+                $priceMatrix->category,
+                $priceMatrix->length,
+                $priceMatrix->dia_min,
+                $priceMatrix->dia_max,
+                $priceMatrix->price_per_cu_m
+            );
+
+            $priceMatrix->delete();
+
+            // Ensure scalers pick up changes immediately
+            Cache::forget('active_price_matrix');
+            AuditLog::create([
+                'user_id' => Auth::id(),
+                'user_name' => Auth::user()->name,
+                'action' => 'Price Matrix Row Deleted',
+                'details' => $details,
+                'ip_address' => $request->ip(),
+            ]);
+        }
+
+        return redirect()->route('admin.dashboard')->with('success', 'Price matrix row deleted successfully.');
+    }
+
+    /**
+     * Create New Supplier Record
+     */
+    public function storeSupplier(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:150|unique:suppliers,name',
+            'contact_no' => 'nullable|string|max:50',
+            'address' => 'nullable|string|max:500',
+        ]);
+
+        $supplier = Supplier::create([
+            'name' => trim($validated['name']),
+            'contact_no' => $validated['contact_no'],
+            'address' => $validated['address'],
+        ]);
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Supplier Added',
+            'details' => "Super Admin added supplier {$supplier->name}.",
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', 'Supplier created successfully!');
+    }
+
+    public function destroySupplier(Request $request, Supplier $supplier)
+    {
+        $supplier->delete();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Supplier Deleted',
+            'details' => "Super Admin deleted supplier {$supplier->name}.",
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', 'Supplier deleted successfully.');
+    }
+
+    /**
+     * Create New Staff / Scaler User Account
+     */
+    public function storeStaff(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:100',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6',
+            'role' => 'required|in:admin,super_admin',
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => strtolower(trim($validated['email'])),
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+            'status' => 'active',
+        ]);
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'User Created',
+            'details' => "Created new account {$user->name} ({$user->email}) with role {$user->role}.",
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', "Staff account {$user->name} created successfully!");
+    }
+
+    /**
+     * Toggle User Account Status (Active / Suspended)
+     */
+    public function toggleUserStatus(Request $request, User $user)
+    {
+        if ($user->id === Auth::id()) {
+            return back()->with('error', 'You cannot suspend your own account!');
+        }
+
+        $user->status = $user->status === 'active' ? 'suspended' : 'active';
+        $user->save();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'User Status Changed',
+            'details' => "Changed status of {$user->name} to {$user->status}.",
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', "Account status for {$user->name} updated to {$user->status}.");
+    }
+
+    /**
+     * Super Admin Historic Data Override: Unlock Record
+     */
+    public function unlockScaleSheet(Request $request, TruckLoad $truckLoad)
+    {
+        $truckLoad->status = 'draft';
+        $truckLoad->save();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Record Unlocked',
+            'details' => "Super Admin unlocked Scale Sheet #{$truckLoad->scale_sheet_no} (Invoice #{$truckLoad->invoice_no}) for editing.",
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', "Scale Sheet #{$truckLoad->scale_sheet_no} unlocked! Staff can now edit this record.");
+    }
+
+    /**
+     * Super Admin Override: Force Delete Scale Sheet
+     */
+    public function destroyScaleSheet(Request $request, TruckLoad $truckLoad)
+    {
+        $sheetNo = $truckLoad->scale_sheet_no;
+        $invoiceNo = $truckLoad->invoice_no;
+
+        $truckLoad->delete();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Record Deleted',
+            'details' => "Super Admin permanently deleted Scale Sheet #{$sheetNo} (Invoice #{$invoiceNo}).",
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', "Scale Sheet #{$sheetNo} deleted permanently by Super Admin override.");
+    }
+
+    /**
+     * Super Admin Override: Toggle Scale Sheet Status (Draft vs Completed/Locked)
+     */
+    public function updateScaleSheetStatus(Request $request, TruckLoad $truckLoad)
+    {
+        $validated = $request->validate([
+            'status' => 'required|in:draft,completed',
+        ]);
+
+        $oldStatus = $truckLoad->status;
+        $truckLoad->status = $validated['status'];
+        $truckLoad->save();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'user_name' => Auth::user()->name,
+            'action' => 'Scale Sheet Status Changed',
+            'details' => sprintf('Super Admin changed Scale Sheet #%s status from %s to %s.',
+                $truckLoad->scale_sheet_no,
+                strtoupper($oldStatus),
+                strtoupper($truckLoad->status)
+            ),
+            'ip_address' => $request->ip(),
+        ]);
+
+        $statusLabel = $truckLoad->status === 'completed' ? 'Finalized / Locked' : 'Draft / Unlocked';
+        return back()->with('success', "Scale Sheet #{$truckLoad->scale_sheet_no} status updated to {$statusLabel}.");
+    }
+}
