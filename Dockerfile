@@ -1,7 +1,7 @@
 # Railway-compatible Dockerfile for Laravel 12 with Vite asset build
 FROM php:8.2-fpm-alpine
 
-RUN apk add --no-cache git curl nodejs npm icu-dev libzip-dev libxml2-dev oniguruma-dev zlib-dev shadow bash \
+RUN apk add --no-cache git curl nodejs npm icu-dev libzip-dev libxml2-dev oniguruma-dev zlib-dev shadow bash postgresql-dev \
     && docker-php-ext-configure zip \
     && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath xml zip intl \
     && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
