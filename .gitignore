@@ -22,3 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Ignore generated Laravel files and local SQLite database
+bootstrap/cache/*.php
+database/database.sqlite
