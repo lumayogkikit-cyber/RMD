@@ -15,9 +15,10 @@ return new class extends Migration {
         });
 
         // Initialize counter with current max numeric scale_sheet_no or a sane default
-        $max = (int) DB::table('truck_loads')->whereNotNull('scale_sheet_no')
-            ->selectRaw('MAX(CAST(scale_sheet_no AS UNSIGNED)) as mx')
-            ->value('mx');
+        $maxValues = DB::table('truck_loads')->whereNotNull('scale_sheet_no')->pluck('scale_sheet_no');
+        $max = (int) $maxValues->map(function($v){
+            return preg_match('/^\d+$/', $v) ? (int)$v : 0;
+        })->max();
 
         if ($max <= 0) {
             $max = 89270; // original baseline so next becomes 89271
