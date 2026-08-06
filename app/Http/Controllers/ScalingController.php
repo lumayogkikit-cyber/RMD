@@ -624,10 +624,37 @@ class ScalingController extends Controller
             $breakdownBrackets = $groupedBrackets;
         }
 
+        // Diagnostic logging: record breakdown for this sheet to help detect mismatches
+        try {
+            \Log::info('printInvoice breakdown', [
+                'truck_load_id' => $truckLoad->id,
+                'scale_sheet_no' => $truckLoad->scale_sheet_no,
+                'total_logs' => $truckLoad->total_logs,
+                'total_volume' => $truckLoad->total_volume,
+                'gross_amount' => $truckLoad->gross_amount,
+                'breakdown' => $breakdownBrackets,
+            ]);
+        } catch (\Throwable $e) {
+            // swallow logging errors to avoid affecting user flow
+        }
+
         $invoiceNumber = $truckLoad->invoice_no ?? ('RMD-' . date('Y') . '-' . sprintf('%04d', $truckLoad->id));
         $preparedOn = optional($truckLoad->updated_at ?? $truckLoad->created_at)->format('M d, Y') ?? now()->format('M d, Y');
         $supplierName = $truckLoad->supplier->name ?? ($truckLoad->supplier_name ?? null) ?? 'N/A';
         $truckPlate = $truckLoad->truck_plate_no ?? $truckLoad->truck_plate ?? $truckLoad->plate_number ?? 'Empty';
+
+        // Diagnostic logging for download action as well
+        try {
+            \Log::info('downloadInvoicePdf breakdown', [
+                'truck_load_id' => $truckLoad->id,
+                'scale_sheet_no' => $truckLoad->scale_sheet_no,
+                'total_logs' => $truckLoad->total_logs,
+                'total_volume' => $truckLoad->total_volume,
+                'gross_amount' => $truckLoad->gross_amount,
+                'breakdown' => $breakdownBrackets,
+            ]);
+        } catch (\Throwable $e) {
+        }
 
         $pdf = Pdf::loadView('scaling.invoice-pdf-template', compact(
             'truckLoad',
