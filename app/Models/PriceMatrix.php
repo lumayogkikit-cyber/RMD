@@ -31,32 +31,67 @@ class PriceMatrix extends Model
     public static function matchRate(string $category, float $length, int $diameter, string $grade = 'Good'): float
     {
         $normalizedGrade = strtoupper(trim($grade));
-        if ($normalizedGrade === 'SAWMILL' || $normalizedGrade === 'SAWMILL (SM)') {
-            $dbSawmill = static::where(function ($q) use ($category) {
-                $q->where('category', strtoupper(trim($category)))
-                  ->orWhere('category', 'SAWMILL');
-            })->value('price_per_cu_m');
+        $normalizedCategory = strtoupper(trim($category));
 
-            if ($dbSawmill !== null) {
-                return (float) $dbSawmill;
+        if ($normalizedGrade === 'SAWMILL' || $normalizedGrade === 'SAWMILL (SM)') {
+            $exactSawmillMatch = static::where(function ($q) use ($normalizedCategory) {
+                $q->where('category', $normalizedCategory)
+                  ->orWhere('category', 'SAWMILL');
+            })
+            ->whereBetween('length', [$length - 0.05, $length + 0.05])
+            ->where('dia_min', '<=', $diameter)
+            ->where('dia_max', '>=', $diameter)
+            ->orderByRaw("category = ? DESC", [$normalizedCategory])
+            ->value('price_per_cu_m');
+
+            if ($exactSawmillMatch !== null) {
+                return (float) $exactSawmillMatch;
+            }
+
+            $fallbackSawmillMatch = static::where(function ($q) use ($normalizedCategory) {
+                $q->where('category', $normalizedCategory)
+                  ->orWhere('category', 'SAWMILL');
+            })
+            ->where('dia_min', '<=', $diameter)
+            ->where('dia_max', '>=', $diameter)
+            ->orderByRaw("category = ? DESC", [$normalizedCategory])
+            ->value('price_per_cu_m');
+
+            if ($fallbackSawmillMatch !== null) {
+                return (float) $fallbackSawmillMatch;
             }
 
             return 1800.00;
         }
 
-        // Query database for matching category/length/diameter range
-        $dbMatch = static::where(function ($q) use ($category) {
-            $cat = strtoupper(trim($category));
-            $q->where('category', $cat)
+        // Query database for matching category/length/diameter range, preferring exact length matches first.
+        $exactLengthMatch = static::where(function ($q) use ($normalizedCategory) {
+            $q->where('category', $normalizedCategory)
+              ->orWhere('category', 'FALCATA');
+        })
+        ->whereBetween('length', [$length - 0.05, $length + 0.05])
+        ->where('dia_min', '<=', $diameter)
+        ->where('dia_max', '>=', $diameter)
+        ->orderByRaw("category = ? DESC", [$normalizedCategory])
+        ->value('price_per_cu_m');
+
+        if ($exactLengthMatch !== null) {
+            return (float) $exactLengthMatch;
+        }
+
+        $fallbackMatch = static::where(function ($q) use ($normalizedCategory) {
+            $q->where('category', $normalizedCategory)
               ->orWhere('category', 'FALCATA');
         })
         ->where('dia_min', '<=', $diameter)
         ->where('dia_max', '>=', $diameter)
+        ->orderByRaw("category = ? DESC", [$normalizedCategory])
         ->value('price_per_cu_m');
 
-        if ($dbMatch !== null) {
-            return (float) $dbMatch;
+        if ($fallbackMatch !== null) {
+            return (float) $fallbackMatch;
         }
+
         // No explicit DB match found — return 0.00 so callers treat it as "no rate set".
         return 0.00;
     }
