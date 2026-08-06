@@ -67,6 +67,10 @@ if (empty($breakdown)) {
     $breakdown = $grouped;
 }
 
+$calculatedGrossAmount = round(array_sum(array_column($breakdown, 'subtotal')), 2);
+$calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+$calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+
 echo "TruckLoad id={$truckLoad->id}\n";
 echo "Scale Sheet #: {$truckLoad->scale_sheet_no}\n";
 echo "Total Logs (total_logs): {$truckLoad->total_logs}\n";
@@ -92,6 +96,9 @@ $pdf = Pdf::loadView('scaling.invoice-pdf-template', [
     'breakdownBrackets' => $breakdown,
     'supplierName' => $truckLoad->supplier->name ?? 'N/A',
     'truckPlate' => $truckLoad->truck_plate_no ?? 'N/A',
+    'calculatedGrossAmount' => $calculatedGrossAmount,
+    'calculatedDeductions' => $calculatedDeductions,
+    'calculatedNetPayable' => $calculatedNetPayable,
 ])
 ->setPaper('a4', 'portrait')
 ->setOptions(['isRemoteEnabled' => true, 'chroot' => public_path(), 'defaultFont' => 'DejaVu Sans']);

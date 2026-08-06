@@ -469,6 +469,10 @@ class ScalingController extends Controller
             ];
         })->values()->toArray();
 
+        $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
+        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+
         // raw fallback items (for debugging if needed in the view)
         $logItems = DB::table('scale_items')->where('truck_load_id', $truckLoad->id)->get();
 
@@ -481,6 +485,9 @@ class ScalingController extends Controller
             'supplierName' => $supplierName,
             'truckPlate' => $truckPlate,
             'logItems' => $logItems,
+            'calculatedGrossAmount' => $calculatedGrossAmount,
+            'calculatedDeductions' => $calculatedDeductions,
+            'calculatedNetPayable' => $calculatedNetPayable,
         ]);
     }
 
@@ -548,6 +555,10 @@ class ScalingController extends Controller
             $breakdownBrackets = $groupedBrackets;
         }
 
+        $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
+        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+
         $invoiceNumber = $truckLoad->invoice_no ?? ('RMD-' . date('Y') . '-' . sprintf('%04d', $truckLoad->id));
         $preparedOn = optional($truckLoad->updated_at ?? $truckLoad->created_at)->format('M d, Y') ?? now()->format('M d, Y');
         $supplierName = $truckLoad->supplier->name ?? ($truckLoad->supplier_name ?? null) ?? 'N/A';
@@ -561,6 +572,9 @@ class ScalingController extends Controller
             'breakdownBrackets' => $breakdownBrackets,
             'supplierName' => $supplierName,
             'truckPlate' => $truckPlate,
+            'calculatedGrossAmount' => $calculatedGrossAmount,
+            'calculatedDeductions' => $calculatedDeductions,
+            'calculatedNetPayable' => $calculatedNetPayable,
         ]);
     }
 
@@ -624,6 +638,10 @@ class ScalingController extends Controller
             $breakdownBrackets = $groupedBrackets;
         }
 
+        $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
+        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+
         // Diagnostic logging: record breakdown for this sheet to help detect mismatches
         try {
             \Log::info('printInvoice breakdown', [
@@ -662,7 +680,10 @@ class ScalingController extends Controller
             'preparedOn',
             'breakdownBrackets',
             'supplierName',
-            'truckPlate'
+            'truckPlate',
+            'calculatedGrossAmount',
+            'calculatedDeductions',
+            'calculatedNetPayable'
         ))
         ->setPaper('a4', 'portrait')
         ->setOptions([

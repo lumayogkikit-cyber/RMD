@@ -45,7 +45,7 @@
                         name="supplier_name" 
                         id="supplier_name"
                         list="supplier-suggestions"
-                        value="{{ old('supplier_name', $scaleSheet->supplier_name ?? '') }}"
+                        value="{{ old('supplier_name', '') }}"
                         placeholder="e.g. AGUSAN TIMBER SUPPLIES" 
                         class="w-full bg-slate-900 border border-slate-700 text-amber-400 font-bold text-sm rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-amber-500 outline-none uppercase"
                         required
@@ -302,9 +302,9 @@
 <!-- Embedded JavaScript Matrix Logic -->
 <script>
     // Embedded Price Matrix Data from DB
-    const priceMatrix = @json($priceMatrices);
+    let priceMatrix = @json($priceMatrices);
     const categoriesFromServer = @json($categories ?? []);
-    const categoryList = (categoriesFromServer && categoriesFromServer.length) ? categoriesFromServer : [...new Set(priceMatrix.map(item => item.category.toUpperCase()))].sort();
+    let categoryList = (categoriesFromServer && categoriesFromServer.length) ? categoriesFromServer : [...new Set(priceMatrix.map(item => item.category.toUpperCase()))].sort();
     const defaultCategory = categoryList.length ? categoryList[0] : 'FALCATA';
 
     // Initial default template rows: even diameters from 16 to 60 (Length strictly 1.3m or 2.6m)
@@ -858,23 +858,19 @@
                     const res = await fetch('{{ route('api.price-matrix') }}', { headers: { 'Accept': 'application/json' } });
                     if (!res.ok) throw new Error('Failed to fetch price matrix');
                     const data = await res.json();
-                    // Replace global priceMatrix and categories
-                    window.priceMatrix = data;
-                    // Update local reference used by this script
-                    // priceMatrix is const at top, so update via global
-                    // Recompute categoryList
-                    const cats = Array.from(new Set(data.map(i => (i.category || '').toUpperCase()))).sort();
+
+                    // Replace price matrix data and recompute categories
+                    priceMatrix = data;
+                    categoryList = Array.from(new Set(data.map(i => (i.category || '').toUpperCase()))).sort();
+
                     // Update selects in existing rows
                     document.querySelectorAll('select.row-cat, select.row-cat-select').forEach(sel => {
                         const current = sel.value;
-                        sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
-                        if (cats.includes(current)) sel.value = current;
+                        sel.innerHTML = categoryList.map(c => `<option value="${c}">${c}</option>`).join('');
+                        if (categoryList.includes(current)) sel.value = current;
                     });
 
                     refreshedAtSpan.textContent = new Date().toLocaleString();
-                    // update local priceMatrix variable used by functions via overriding global
-                    window.priceMatrix = data;
-                    // Re-run calc
                     recalculateAll();
                 } catch (err) {
                     console.error(err);

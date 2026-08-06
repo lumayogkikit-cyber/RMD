@@ -242,14 +242,14 @@
         <tr>
             <td style="width: 50%; vertical-align: top; padding-right: 15px;">
                 <div style="border: 1.5px solid #334155; border-radius: 10px; padding: 10px;">
-                    <div style="font-size: 9.5px; color: #475569; font-weight: bold; margin-bottom: 4px;">GROSS WOOD AMOUNT: <span style="float: right; color: #0f172a;">₱ {{ number_format($truckLoad->gross_amount, 2) }}</span></div>
-                    <div style="font-size: 9.5px; color: #475569; font-weight: bold;">TOTAL DEDUCTIONS: <span style="float: right; color: #0f172a;">₱ {{ number_format($truckLoad->total_deductions, 2) }}</span></div>
+                    <div style="font-size: 9.5px; color: #475569; font-weight: bold; margin-bottom: 4px;">GROSS WOOD AMOUNT: <span style="float: right; color: #0f172a;">₱ {{ number_format($calculatedGrossAmount, 2) }}</span></div>
+                    <div style="font-size: 9.5px; color: #475569; font-weight: bold;">TOTAL DEDUCTIONS: <span style="float: right; color: #0f172a;">₱ {{ number_format($calculatedDeductions, 2) }}</span></div>
                 </div>
             </td>
             <td style="width: 50%; vertical-align: top;">
                 <div class="payout-box">
                     <div class="payout-label">NET AMOUNT PAYABLE TO SUPPLIER</div>
-                    <div class="payout-amount">₱ {{ number_format($truckLoad->net_payable, 2) }}</div>
+                    <div class="payout-amount">₱ {{ number_format($calculatedNetPayable, 2) }}</div>
                 </div>
             </td>
         </tr>

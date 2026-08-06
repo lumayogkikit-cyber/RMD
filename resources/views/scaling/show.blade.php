@@ -147,18 +147,18 @@
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Expenses Deduction:</span><span class="font-mono">₱ {{ number_format($scaleSheet->expenses_deduction, 3) }}</span></div>
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Travel Paper / Permit:</span><span class="font-mono">₱ {{ number_format($scaleSheet->travel_paper_deduction, 3) }}</span></div>
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Trucking Deduction:</span><span class="font-mono">₱ {{ number_format($scaleSheet->trucking_deduction, 3) }}</span></div>
-                    <div class="flex justify-between font-bold text-rose-400 print:text-black border-t border-slate-700 print:border-black pt-2 text-sm"><span>Total Deductions:</span><span class="font-mono">- ₱ {{ number_format($scaleSheet->total_deductions, 3) }}</span></div>
+                    <div class="flex justify-between font-bold text-rose-400 print:text-black border-t border-slate-700 print:border-black pt-2 text-sm"><span>Total Deductions:</span><span class="font-mono">- ₱ {{ number_format($calculatedDeductions, 3) }}</span></div>
                 </div>
             </div>
 
             <div class="border-2 border-amber-500/60 print:border-black rounded-xl p-6 bg-slate-800/80 print:bg-gray-100 flex flex-col justify-between space-y-4">
                 <div>
-                    <div class="flex justify-between items-center text-slate-300 print:text-black text-xs font-semibold uppercase"><span>Gross Wood Amount:</span><span class="font-mono font-bold text-sm">₱ {{ number_format($scaleSheet->gross_amount, 3) }}</span></div>
-                    <div class="flex justify-between items-center text-rose-400 print:text-black text-xs font-semibold uppercase mt-1"><span>Less Total Deductions:</span><span class="font-mono font-bold text-sm">- ₱ {{ number_format($scaleSheet->total_deductions, 3) }}</span></div>
+                    <div class="flex justify-between items-center text-slate-300 print:text-black text-xs font-semibold uppercase"><span>Gross Wood Amount:</span><span class="font-mono font-bold text-sm">₱ {{ number_format($calculatedGrossAmount, 3) }}</span></div>
+                    <div class="flex justify-between items-center text-rose-400 print:text-black text-xs font-semibold uppercase mt-1"><span>Less Total Deductions:</span><span class="font-mono font-bold text-sm">- ₱ {{ number_format($calculatedDeductions, 3) }}</span></div>
                 </div>
                 <div class="border-t-2 border-amber-500/50 print:border-black pt-4">
                     <span class="text-xs uppercase font-extrabold text-amber-400 print:text-black tracking-wider block">Net Amount Payable to Supplier</span>
-                    <span class="text-3xl font-extrabold font-mono text-emerald-400 print:text-black">₱ {{ number_format($scaleSheet->net_payable, 3) }}</span>
+                    <span class="text-3xl font-extrabold font-mono text-emerald-400 print:text-black">₱ {{ number_format($calculatedNetPayable, 3) }}</span>
                 </div>
             </div>
         </div>
