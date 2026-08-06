@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Str;
-use PDO;
 
 $dbUrl = env('MYSQL_URL') ?: env('DATABASE_URL') ?: env('DB_URL');
 $dbUrlParsed = $dbUrl ? parse_url($dbUrl) : [];
