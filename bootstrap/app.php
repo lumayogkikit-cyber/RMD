@@ -11,7 +11,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->push(App\Http\Middleware\TrustProxies::class);
+        $middleware->trustProxies('*');
+        $middleware->append(\App\Http\Middleware\ForceHsts::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
