@@ -1,6 +1,8 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Models\User;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ScalingController;
@@ -9,6 +11,25 @@ use App\Http\Middleware\CheckRole;
 
 // Public Landing Page
 Route::get('/', [LandingController::class, 'index'])->name('landing');
+
+// Temporary production debug endpoint (remove after verification)
+Route::get('/debug/users', function (Request $request) {
+    $secret = env('DB_DEBUG_SECRET', 'rmd-debug-2026');
+    if ($request->query('secret') !== $secret) {
+        abort(404);
+    }
+
+    return response()->json([
+        'active_env' => env('APP_ENV'),
+        'db_host' => config('database.connections.mysql.host'),
+        'db_port' => config('database.connections.mysql.port'),
+        'db_database' => config('database.connections.mysql.database'),
+        'db_username' => config('database.connections.mysql.username'),
+        'db_password_is_set' => ! empty(config('database.connections.mysql.password')),
+        'user_count' => User::count(),
+        'users' => User::select('id', 'email', 'role', 'status')->orderBy('id')->limit(10)->get(),
+    ]);
+})->name('debug.users');
 
 // Authentication Routes (Guest Only)
 Route::middleware('guest')->group(function () {
