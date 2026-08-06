@@ -17,44 +17,54 @@ class WoodScalingSeeder extends Seeder
     public function run(): void
     {
         // 0. Create Default Users (Super Admin & Admin Scaler)
-        $superAdmin = User::create([
-            'name' => 'Super Admin Master',
-            'email' => 'superadmin@rmd.com',
-            'password' => Hash::make('password'),
-            'role' => 'super_admin',
-            'status' => 'active',
-        ]);
+        $superAdmin = User::firstOrCreate(
+            ['email' => 'superadmin@rmd.com'],
+            [
+                'name' => 'Super Admin Master',
+                'password' => Hash::make('password'),
+                'role' => 'super_admin',
+                'status' => 'active',
+            ]
+        );
 
-        $scalerAdmin = User::create([
-            'name' => 'Scaler Staff',
-            'email' => 'scaler@rmd.com',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-            'status' => 'active',
-        ]);
+        $scalerAdmin = User::firstOrCreate(
+            ['email' => 'scaler@rmd.com'],
+            [
+                'name' => 'Scaler Staff',
+                'password' => Hash::make('password'),
+                'role' => 'admin',
+                'status' => 'active',
+            ]
+        );
 
-        AuditLog::create([
-            'user_id' => $superAdmin->id,
-            'user_name' => $superAdmin->name,
-            'action' => 'System Initialized',
-            'details' => 'Created initial Super Admin and Scaler Admin accounts.',
-            'ip_address' => '127.0.0.1',
-        ]);
+        if ($superAdmin->wasRecentlyCreated || $scalerAdmin->wasRecentlyCreated) {
+            AuditLog::create([
+                'user_id' => $superAdmin->id,
+                'user_name' => $superAdmin->name,
+                'action' => 'System Initialized',
+                'details' => 'Created initial Super Admin and Scaler Admin accounts.',
+                'ip_address' => '127.0.0.1',
+            ]);
+        }
+
         // 1. Create Suppliers
-        $aldo = Supplier::create([
+        $aldo = Supplier::firstOrCreate([
             'name' => 'ALDO BEHING',
+        ], [
             'contact_no' => '0917-555-0192',
             'address' => 'Butuan City, Agusan del Norte',
         ]);
 
-        $juan = Supplier::create([
+        $juan = Supplier::firstOrCreate([
             'name' => 'JUAN DELA CRUZ',
+        ], [
             'contact_no' => '0928-888-2104',
             'address' => 'Prosperidad, Agusan del Sur',
         ]);
 
-        $agusan = Supplier::create([
+        $agusan = Supplier::firstOrCreate([
             'name' => 'AGUSAN TIMBER SUPPLIES',
+        ], [
             'contact_no' => '0905-123-4567',
             'address' => 'San Francisco, Agusan del Sur',
         ]);
@@ -104,66 +114,69 @@ class WoodScalingSeeder extends Seeder
         }
 
         // 3. Create Sample Scale Sheet (Truck Load)
-        $load = TruckLoad::create([
-            'supplier_id' => $aldo->id,
-            'truck_plate_no' => 'ADH-2525',
-            'scale_sheet_no' => '089271',
-            'invoice_no' => 'RMD-2026-0001',
-            'status' => 'completed',
-            'date_unload' => Carbon::now()->subDays(1),
-            'date_scaled' => Carbon::now(),
-            'drivers_assistance' => 500.00,
-            'expenses_deduction' => 250.00,
-            'travel_paper_deduction' => 300.00,
-            'trucking_deduction' => 1200.00,
-            'scaled_by' => 'J. Boholst (Scaler)',
-            'notes' => 'First batch delivery of Falcata and Lauan logs.',
-        ]);
+        $load = TruckLoad::firstOrCreate(
+            ['invoice_no' => 'RMD-2026-0001'],
+            [
+                'supplier_id' => $aldo->id,
+                'truck_plate_no' => 'ADH-2525',
+                'scale_sheet_no' => '089271',
+                'status' => 'completed',
+                'date_unload' => Carbon::now()->subDays(1),
+                'date_scaled' => Carbon::now(),
+                'drivers_assistance' => 500.00,
+                'expenses_deduction' => 250.00,
+                'travel_paper_deduction' => 300.00,
+                'trucking_deduction' => 1200.00,
+                'scaled_by' => 'J. Boholst (Scaler)',
+                'notes' => 'First batch delivery of Falcata and Lauan logs.',
+            ]
+        );
 
-        // Sample Items for Load 089271
-        $itemsData = [
-            ['cat' => 'FALCATA', 'len' => 2.50, 'dia' => 24, 'qty' => 10],
-            ['cat' => 'FALCATA', 'len' => 2.50, 'dia' => 32, 'qty' => 8],
-            ['cat' => 'FALCATA', 'len' => 3.00, 'dia' => 42, 'qty' => 5],
-            ['cat' => 'LAUAN',   'len' => 2.50, 'dia' => 28, 'qty' => 6],
-        ];
+        if ($load->wasRecentlyCreated) {
+            $itemsData = [
+                ['cat' => 'FALCATA', 'len' => 2.50, 'dia' => 24, 'qty' => 10],
+                ['cat' => 'FALCATA', 'len' => 2.50, 'dia' => 32, 'qty' => 8],
+                ['cat' => 'FALCATA', 'len' => 3.00, 'dia' => 42, 'qty' => 5],
+                ['cat' => 'LAUAN',   'len' => 2.50, 'dia' => 28, 'qty' => 6],
+            ];
 
-        $totalLogs = 0;
-        $totalVol = 0.0;
-        $grossVal = 0.0;
+            $totalLogs = 0;
+            $totalVol = 0.0;
+            $grossVal = 0.0;
 
-        foreach ($itemsData as $item) {
-            $volPerLog = ScaleItem::calculateBreretonVolume($item['dia'], $item['len']);
-            $totVol = round($volPerLog * $item['qty'], 3);
-            $rate = PriceMatrix::matchRate($item['cat'], $item['len'], $item['dia']);
-            $subtotal = round($totVol * $rate, 3);
+            foreach ($itemsData as $item) {
+                $volPerLog = ScaleItem::calculateBreretonVolume($item['dia'], $item['len']);
+                $totVol = round($volPerLog * $item['qty'], 3);
+                $rate = PriceMatrix::matchRate($item['cat'], $item['len'], $item['dia']);
+                $subtotal = round($totVol * $rate, 3);
 
-            ScaleItem::create([
-                'truck_load_id' => $load->id,
-                'wood_category' => $item['cat'],
-                'length' => $item['len'],
-                'diameter' => $item['dia'],
-                'quantity' => $item['qty'],
-                'volume' => $volPerLog,
-                'total_volume' => $totVol,
-                'price_per_cu_m' => $rate,
-                'subtotal' => $subtotal,
+                ScaleItem::create([
+                    'truck_load_id' => $load->id,
+                    'wood_category' => $item['cat'],
+                    'length' => $item['len'],
+                    'diameter' => $item['dia'],
+                    'quantity' => $item['qty'],
+                    'volume' => $volPerLog,
+                    'total_volume' => $totVol,
+                    'price_per_cu_m' => $rate,
+                    'subtotal' => $subtotal,
+                ]);
+
+                $totalLogs += $item['qty'];
+                $totalVol += $totVol;
+                $grossVal += $subtotal;
+            }
+
+            $totalDeductions = 500.00 + 250.00 + 300.00 + 1200.00;
+            $netPayable = $grossVal - $totalDeductions;
+
+            $load->update([
+                'total_logs' => $totalLogs,
+                'total_volume' => round($totalVol, 3),
+                'gross_amount' => round($grossVal, 3),
+                'total_deductions' => round($totalDeductions, 3),
+                'net_payable' => round($netPayable, 3),
             ]);
-
-            $totalLogs += $item['qty'];
-            $totalVol += $totVol;
-            $grossVal += $subtotal;
         }
-
-        $totalDeductions = 500.00 + 250.00 + 300.00 + 1200.00;
-        $netPayable = $grossVal - $totalDeductions;
-
-        $load->update([
-            'total_logs' => $totalLogs,
-            'total_volume' => round($totalVol, 3),
-            'gross_amount' => round($grossVal, 3),
-            'total_deductions' => round($totalDeductions, 3),
-            'net_payable' => round($netPayable, 3),
-        ]);
     }
 }

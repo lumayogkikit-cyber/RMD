@@ -321,8 +321,8 @@
                             <td class="monospace">{{ $bracket['bracket'] }}</td>
                             <td class="text-right monospace">{{ number_format($bracket['pieces']) }}</td>
                             <td class="text-right monospace">{{ number_format($bracket['total_volume'], 3) }}</td>
-                            <td class="text-right monospace">{{ $bracket['rate'] > 0 ? '₱ ' . number_format($bracket['rate'], 3) : '-' }}</td>
-                            <td class="text-right monospace">₱ {{ number_format($bracket['subtotal'], 3) }}</td>
+                            <td class="text-right monospace">{{ $bracket['rate'] > 0 ? '₱ ' . number_format($bracket['rate'], 2) : '-' }}</td>
+                            <td class="text-right monospace">₱ {{ number_format(($bracket['pieces'] ?? 0) > 0 ? $bracket['subtotal'] : 0, 2) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -333,18 +333,18 @@
                     <div class="summary-box">
                         <div class="row">
                             <span class="label">Gross Wood Amount</span>
-                            <span class="value">₱ {{ number_format($truckLoad->gross_amount, 3) }}</span>
+                            <span class="value">₱ {{ number_format($truckLoad->gross_amount, 2) }}</span>
                         </div>
                         <div class="row">
                             <span class="label">Total Deductions</span>
-                            <span class="value">₱ {{ number_format($truckLoad->total_deductions, 3) }}</span>
+                            <span class="value">₱ {{ number_format($truckLoad->total_deductions, 2) }}</span>
                         </div>
                     </div>
                 </div>
                 <div class="summary-right">
                     <div class="summary-highlight">
                         <span class="title">Net Amount Payable to Supplier</span>
-                        <span class="amount">₱ {{ number_format($truckLoad->net_payable, 3) }}</span>
+                        <span class="amount">₱ {{ number_format($truckLoad->net_payable, 2) }}</span>
                     </div>
                 </div>
             </div>

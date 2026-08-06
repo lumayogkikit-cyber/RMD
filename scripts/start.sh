@@ -2,6 +2,8 @@
 set -e
 
 echo "Starting Laravel runtime..."
+php artisan migrate --force
+php artisan db:seed --class=WoodScalingSeeder --force
 php artisan config:clear
 php artisan config:cache
 

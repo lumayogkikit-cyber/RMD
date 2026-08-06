@@ -99,13 +99,19 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800/60 font-mono">
+                        @php
+                            $groupedPrices = $priceMatrices->groupBy('category');
+                            $inputIndex = 0;
+                        @endphp
+
+                        @foreach($groupedPrices as $category => $items)
                         <tr class="bg-slate-900/40 font-sans font-bold text-amber-400">
                             <td colspan="3" class="p-2 text-xs uppercase tracking-widest">
-                                Peelable <br> <span class="text-slate-400 font-normal">F1 (1.3 / 2.6)</span>
+                                {{ ucwords(strtolower($category)) }} <br> <span class="text-slate-400 font-normal">F1 (1.3 / 2.6)</span>
                             </td>
                         </tr>
 
-                        @foreach($priceMatrices as $item)
+                        @foreach($items as $item)
                         <tr class="hover:bg-slate-800/40">
                             <td class="p-3 font-semibold text-white">
                                 @if($item->dia_min === 0 && $item->dia_max === 0)
@@ -119,8 +125,9 @@
                             <td class="p-3 text-center text-slate-500">-</td>
                             <td class="p-3 text-right">
                                 <div class="flex items-center justify-end gap-2">
-                                    <input type="hidden" name="prices[{{ $loop->index }}][id]" value="{{ $item->id }}">
-                                    <input type="number" step="0.01" min="0" name="prices[{{ $loop->index }}][price]" value="{{ number_format($item->price_per_cu_m, 2, '.', '') }}" class="w-24 bg-slate-950 border border-slate-700 text-emerald-400 font-mono font-bold text-right text-xs rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none">
+                                    <input type="hidden" name="prices[{{ $inputIndex }}][id]" value="{{ $item->id }}">
+                                    <input type="number" step="0.01" min="0" name="prices[{{ $inputIndex }}][price]" value="{{ number_format($item->price_per_cu_m, 2, '.', '') }}" class="w-24 bg-slate-950 border border-slate-700 text-emerald-400 font-mono font-bold text-right text-xs rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 outline-none">
+                                    @php $inputIndex++; @endphp
                                     <span class="font-bold text-emerald-400">₱</span>
                                 </div>
                             </td>

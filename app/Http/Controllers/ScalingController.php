@@ -417,11 +417,8 @@ class ScalingController extends Controller
         // truck plate fallback variations
         $truckPlate = $truckLoad->truck_plate_no ?? $truckLoad->truck_plate ?? $truckLoad->plate_number ?? 'Empty';
 
-        // ensure we have a collection of items; if relation empty, pull raw rows from DB
-        $itemsCollection = $truckLoad->scaleItems ?? collect();
-        if ($itemsCollection->isEmpty()) {
-            $itemsCollection = collect(DB::table('scale_items')->where('truck_load_id', $truckLoad->id)->get());
-        }
+        // ensure we explicitly load scale items for this truck load (avoid accidental global collections)
+        $itemsCollection = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
 
         // prepare bracket aggregation (same logic as printInvoice but tolerant to missing keys)
         $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
@@ -508,7 +505,10 @@ class ScalingController extends Controller
             ];
         }
 
-        foreach ($truckLoad->scaleItems as $item) {
+        // explicitly query scale items for this truck load to avoid pulling unrelated rows
+        $items = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
+
+        foreach ($items as $item) {
             $grade = $item->grade ?? 'Good';
             $dia = (int) $item->diameter;
 
@@ -533,6 +533,14 @@ class ScalingController extends Controller
             $groupedBrackets[$b]['total_volume'] += (float) $item->total_volume;
             $groupedBrackets[$b]['rate'] = (float) $item->price_per_cu_m;
             $groupedBrackets[$b]['subtotal'] += (float) $item->subtotal;
+        }
+
+        // zero-out subtotals for brackets that have zero pieces (defensive: avoid aggregating stray volumes)
+        foreach ($groupedBrackets as $k => $row) {
+            if (($row['pieces'] ?? 0) <= 0) {
+                $groupedBrackets[$k]['subtotal'] = 0.0;
+                $groupedBrackets[$k]['total_volume'] = 0.0;
+            }
         }
 
         $breakdownBrackets = array_filter($groupedBrackets, fn($row) => $row['pieces'] > 0 || $row['total_volume'] > 0);
@@ -573,7 +581,10 @@ class ScalingController extends Controller
             ];
         }
 
-        foreach ($truckLoad->scaleItems as $item) {
+        // explicitly query scale items for this truck load to avoid pulling unrelated rows
+        $items = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
+
+        foreach ($items as $item) {
             $grade = $item->grade ?? 'Good';
             $dia = (int) $item->diameter;
 
@@ -598,6 +609,14 @@ class ScalingController extends Controller
             $groupedBrackets[$b]['total_volume'] += (float) $item->total_volume;
             $groupedBrackets[$b]['rate'] = (float) $item->price_per_cu_m;
             $groupedBrackets[$b]['subtotal'] += (float) $item->subtotal;
+        }
+
+        // zero-out subtotals for brackets that have zero pieces (defensive)
+        foreach ($groupedBrackets as $k => $row) {
+            if (($row['pieces'] ?? 0) <= 0) {
+                $groupedBrackets[$k]['subtotal'] = 0.0;
+                $groupedBrackets[$k]['total_volume'] = 0.0;
+            }
         }
 
         $breakdownBrackets = array_filter($groupedBrackets, fn($row) => $row['pieces'] > 0 || $row['total_volume'] > 0);
