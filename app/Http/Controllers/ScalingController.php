@@ -600,11 +600,14 @@ class ScalingController extends Controller
             $groupedBrackets[$b]['total_volume'] += (float) $item->total_volume;
 
             $category = $item->wood_category ?? ($item->category ?? 'FALCATA');
-            $itemRate = PriceMatrix::matchRate($category, (float) $item->length, (int) $item->diameter, $grade);
+            $rateCategory = $category;
+            if ($grade === 'Sawmill' || str_contains($grade, 'Sawmill')) {
+                $rateCategory = 'SAWMILL';
+            }
+
+            $itemRate = PriceMatrix::matchRate($rateCategory, (float) $item->length, (int) $item->diameter, $grade);
             if ($groupedBrackets[$b]['rate'] <= 0 && $itemRate > 0) {
                 $groupedBrackets[$b]['rate'] = $itemRate;
-            } elseif ($groupedBrackets[$b]['rate'] <= 0) {
-                $groupedBrackets[$b]['rate'] = (float) $item->price_per_cu_m;
             }
 
             $groupedBrackets[$b]['subtotal'] += (float) $item->subtotal;
