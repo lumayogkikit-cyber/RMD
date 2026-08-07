@@ -322,7 +322,7 @@
                             <td class="text-right monospace">{{ number_format($bracket['pieces']) }}</td>
                             <td class="text-right monospace">{{ number_format($bracket['total_volume'], 3) }}</td>
                             <td class="text-right monospace">{{ $bracket['rate'] > 0 ? '₱ ' . number_format($bracket['rate'], 2) : '-' }}</td>
-                            <td class="text-right monospace">₱ {{ number_format(($bracket['pieces'] ?? 0) > 0 ? $bracket['subtotal'] : 0, 2) }}</td>
+                            <td class="text-right monospace">₱ {{ number_format($bracket['subtotal'] ?? 0, 2) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
