@@ -9,9 +9,9 @@ use App\Models\TruckLoad;
 use App\Models\ScaleItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB as FacadesDB;
@@ -261,6 +261,15 @@ class ScalingController extends Controller
      */
     public function store(Request $request)
     {
+        $filteredItems = collect($request->input('items', []))
+            ->filter(function ($item) {
+                return isset($item['quantity']) && (int) $item['quantity'] > 0;
+            })
+            ->values()
+            ->all();
+
+        $request->merge(['items' => $filteredItems]);
+
         $validated = $request->validate([
             'supplier_name' => 'nullable|string|max:150',
             'supplier_id' => 'nullable|exists:suppliers,id',
@@ -274,6 +283,18 @@ class ScalingController extends Controller
             'travel_paper_deduction' => 'nullable|numeric|min:0',
             'trucking_deduction' => 'nullable|numeric|min:0',
             'items' => 'required|array|min:1',
+            'items.*.category' => 'required|string|max:120',
+            'items.*.grade' => 'required|string|max:100',
+            'items.*.length' => 'required|numeric|min:0.1',
+            'items.*.diameter' => 'required|integer|min:1',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.is_split' => 'sometimes|boolean',
+            'items.*.split_group_id' => 'nullable|string|max:100',
+            'items.*.parent_log_id' => 'nullable|integer',
+            'items.*.split_side' => 'nullable|string|in:A,B',
+            'items.*.volume' => 'nullable|numeric|min:0',
+            'items.*.total_volume' => 'nullable|numeric|min:0',
+            'items.*.subtotal' => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -331,7 +352,10 @@ class ScalingController extends Controller
             $totalVolume = 0.0;
             $grossAmount = 0.0;
 
-            foreach ($validated['items'] as $item) {
+            $splitChildRows = [];
+            $splitParentMap = [];
+
+            $createScaleItem = function (array $item, ?int $parentLogId = null) use (&$truckLoad, &$totalLogs, &$totalVolume, &$grossAmount) {
                 $category = strtoupper(trim($item['category'] ?? 'UNKNOWN'));
                 $grade = $item['grade'] ?? 'Good';
                 $length = (float) ($item['length'] ?? 2.6);
@@ -340,16 +364,41 @@ class ScalingController extends Controller
                 $isSplit = isset($item['is_split']) && $item['is_split'];
 
                 $volPerLog = ScaleItem::calculateBreretonVolume($diameter, $length);
-                $effectivePieceCount = ScaleItem::resolveEffectivePieceCount($quantity, $isSplit, false);
-                $calculationQuantity = ScaleItem::resolveVolumeBasisQuantity($quantity, $isSplit, false);
-                $totVol = round($volPerLog * $calculationQuantity, 3);
+                if (isset($item['volume']) && is_numeric($item['volume']) && (float) $item['volume'] > 0) {
+                    $volPerLog = round((float) $item['volume'], 3);
+                }
+
+                $effectivePieceCount = ScaleItem::resolveEffectivePieceCount($quantity, $isSplit, $parentLogId !== null);
+                $calculationQuantity = ScaleItem::resolveVolumeBasisQuantity($quantity, $isSplit, $parentLogId !== null);
+
+                $submittedVolume = isset($item['volume']) && is_numeric($item['volume']) ? round((float) $item['volume'], 3) : null;
+                $submittedTotalVolume = isset($item['total_volume']) && is_numeric($item['total_volume']) ? round((float) $item['total_volume'], 3) : null;
+                $submittedSubtotal = isset($item['subtotal']) && is_numeric($item['subtotal']) ? round((float) $item['subtotal'], 2) : null;
+
+                if ($submittedVolume !== null && $submittedVolume > 0) {
+                    $volPerLog = $submittedVolume;
+                }
+
+                $totVol = $submittedTotalVolume;
+                if ($totVol === null || $totVol <= 0) {
+                    $totVol = round($volPerLog * $calculationQuantity, 3);
+                }
 
                 $rate = PriceMatrix::matchRate($category, $length, $diameter, $grade);
-                $subtotal = round($totVol * $rate, 2);
+                $subtotal = $submittedSubtotal;
+                if ($subtotal === null) {
+                    $subtotal = round($totVol * $rate, 2);
+                }
 
-                ScaleItem::create([
+                if ($totVol > 0 && $subtotal !== null && $subtotal >= 0) {
+                    $pricePerCuM = round($subtotal / $totVol, 2);
+                } else {
+                    $pricePerCuM = $rate;
+                }
+
+                $scaleItem = ScaleItem::create([
                     'truck_load_id' => $truckLoad->id,
-                    'parent_log_id' => $item['parent_log_id'] ?? null,
+                    'parent_log_id' => $parentLogId,
                     'wood_category' => $category,
                     'grade' => $grade,
                     'is_split' => $isSplit,
@@ -359,13 +408,40 @@ class ScalingController extends Controller
                     'quantity' => $quantity,
                     'volume' => $volPerLog,
                     'total_volume' => $totVol,
-                    'price_per_cu_m' => $rate,
+                    'price_per_cu_m' => $pricePerCuM,
                     'subtotal' => $subtotal,
                 ]);
 
                 $totalLogs += $effectivePieceCount;
                 $totalVolume += $totVol;
                 $grossAmount += $subtotal;
+
+                return $scaleItem;
+            };
+
+            foreach ($validated['items'] as $itemKey => $item) {
+                $isSplit = isset($item['is_split']) && $item['is_split'];
+                $splitGroup = trim((string) ($item['split_group_id'] ?? ''));
+                $splitSide = strtoupper(trim((string) ($item['split_side'] ?? 'A')));
+
+                if ($isSplit && $splitGroup !== '' && $splitSide === 'B') {
+                    $splitChildRows[$splitGroup][] = $item;
+                    continue;
+                }
+
+                $parentItem = $createScaleItem($item, null);
+
+                if ($isSplit && $splitGroup !== '') {
+                    $splitParentMap[$splitGroup] = $parentItem->id;
+                }
+            }
+
+            foreach ($splitChildRows as $splitGroup => $childRows) {
+                $parentId = $splitParentMap[$splitGroup] ?? null;
+
+                foreach ($childRows as $childItem) {
+                    $createScaleItem($childItem, $parentId);
+                }
             }
 
             $totalDeductions = $driversAssistance + $expensesDeduction + $travelPaper + $truckingDeduction;
@@ -383,10 +459,14 @@ class ScalingController extends Controller
 
             return redirect()->route('scaling.invoice.print', $truckLoad->id)
                 ->with('success', "Invoice #{$truckLoad->invoice_no} (Scale Sheet #{$truckLoad->scale_sheet_no}) generated successfully!");
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
+            if ($e instanceof ValidationException) {
+                return redirect()->back()->withInput()->withErrors($e->errors());
+            }
+
             Log::error('Scaling store failed', ['error' => $e->getMessage()]);
-            return back()->withInput()->with('error', 'Error saving scale sheet: ' . $e->getMessage());
+            return redirect()->back()->withInput()->with('error', 'Error saving scale sheet: ' . $e->getMessage());
         }
     }
 
@@ -395,100 +475,23 @@ class ScalingController extends Controller
      */
     public function show($id)
     {
-        // try multiple eager-load variations to avoid missing relations
-        try {
-            $truckLoad = TruckLoad::with(['supplier', 'scaleItems', 'items', 'logItems', 'details'])->find($id);
-        } catch (\Illuminate\Database\Eloquent\RelationNotFoundException $e) {
-            $truckLoad = TruckLoad::with(['supplier', 'scaleItems'])->find($id);
-        }
+        $truckLoad = TruckLoad::with(['supplier', 'scaleItems'])->findOrFail($id);
 
-        // fallback: if not found via id as primary, try route-model binding style
-        if (! $truckLoad) {
-            $truckLoad = TruckLoad::with(['supplier', 'scaleItems'])->findOrFail($id);
-        }
-
-        // compute friendly view variables with safe fallbacks for possible column name variations
         $invoiceNumber = $truckLoad->invoice_no ?? ('RMD-' . date('Y') . '-' . sprintf('%04d', $truckLoad->id));
         $preparedOn = optional($truckLoad->updated_at ?? $truckLoad->created_at)->format('M d, Y') ?? now()->format('M d, Y');
-
-        // supplier name fallback: relation -> flat column
         $supplierName = $truckLoad->supplier->name ?? ($truckLoad->supplier_name ?? null) ?? 'N/A';
-
-        // truck plate fallback variations
         $truckPlate = $truckLoad->truck_plate_no ?? $truckLoad->truck_plate ?? $truckLoad->plate_number ?? 'Empty';
 
-        // ensure we explicitly load scale items for this truck load (avoid accidental global collections)
-        $itemsCollection = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
+        $invoiceData = $this->buildInvoiceBreakdown($truckLoad);
 
-        // prepare bracket aggregation (same logic as printInvoice but tolerant to missing keys)
-        $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
-        $brackets = $itemsCollection->map(function ($item) {
-            $grade = $item->grade ?? 'Good';
-            $dia = (int) ($item->diameter ?? 0);
-
-            if ($grade === 'Sawmill' || str_contains($grade, 'Sawmill')) {
-                $bracket = 'Sawmill (SM)';
-            } elseif ($dia <= 24) {
-                $bracket = '20-24';
-            } elseif ($dia <= 28) {
-                $bracket = '26-28';
-            } elseif ($dia <= 38) {
-                $bracket = '30-38';
-            } elseif ($dia <= 48) {
-                $bracket = '40-48';
-            } elseif ($dia <= 58) {
-                $bracket = '50-58';
-            } else {
-                $bracket = '60-UP';
-            }
-
-            return [
-                'bracket' => $bracket,
-                'pieces' => (int) ($item->quantity ?? 0),
-                'total_volume' => (float) ($item->total_volume ?? 0.0),
-                'rate' => (float) ($item->price_per_cu_m ?? 0.0),
-                'subtotal' => (float) ($item->subtotal ?? 0.0),
-            ];
-        })->groupBy('bracket')->map(function ($items, $bracket) {
-            return [
-                'bracket' => $bracket,
-                'pieces' => $items->sum('pieces'),
-                'total_volume' => $items->sum('total_volume'),
-                'rate' => $items->avg('rate'),
-                'subtotal' => $items->sum('subtotal'),
-            ];
-        })->toArray();
-
-        $breakdownBrackets = collect($bracketOrder)->map(function ($bracket) use ($brackets) {
-            return $brackets[$bracket] ?? [
-                'bracket' => $bracket,
-                'pieces' => 0,
-                'total_volume' => 0.0,
-                'rate' => 0.0,
-                'subtotal' => 0.0,
-            ];
-        })->values()->toArray();
-
-        $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
-        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
-        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
-
-        // raw fallback items (for debugging if needed in the view)
-        $logItems = DB::table('scale_items')->where('truck_load_id', $truckLoad->id)->get();
-
-        return view('scaling.show', [
+        return view('scaling.show', array_merge([
             'scaleSheet' => $truckLoad,
             'truckLoad' => $truckLoad,
             'invoiceNumber' => $invoiceNumber,
             'preparedOn' => $preparedOn,
-            'breakdownBrackets' => $breakdownBrackets,
             'supplierName' => $supplierName,
             'truckPlate' => $truckPlate,
-            'logItems' => $logItems,
-            'calculatedGrossAmount' => $calculatedGrossAmount,
-            'calculatedDeductions' => $calculatedDeductions,
-            'calculatedNetPayable' => $calculatedNetPayable,
-        ]);
+        ], $invoiceData));
     }
 
     /**
@@ -497,171 +500,33 @@ class ScalingController extends Controller
     public function printInvoice(TruckLoad $truckLoad)
     {
         $truckLoad->loadMissing(['supplier', 'scaleItems']);
-
-        // Group scale items into standard size/grade brackets
-        $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
-        $groupedBrackets = [];
-
-        foreach ($bracketOrder as $b) {
-            $groupedBrackets[$b] = [
-                'bracket' => $b,
-                'pieces' => 0,
-                'total_volume' => 0.0,
-                'rate' => 0.0,
-                'subtotal' => 0.0,
-            ];
-        }
-
-        // explicitly query scale items for this truck load to avoid pulling unrelated rows
-        $items = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
-
-        foreach ($items as $item) {
-            $grade = $item->grade ?? 'Good';
-            $dia = (int) $item->diameter;
-
-            if ($grade === 'Sawmill') {
-                $b = 'Sawmill (SM)';
-            } elseif ($dia <= 24) {
-                $b = '20-24';
-            } elseif ($dia <= 28) {
-                $b = '26-28';
-            } elseif ($dia <= 38) {
-                $b = '30-38';
-            } elseif ($dia <= 48) {
-                $b = '40-48';
-            } elseif ($dia <= 58) {
-                $b = '50-58';
-            } else {
-                $b = '60-UP';
-            }
-
-            $effectivePieceCount = ScaleItem::resolveEffectivePieceCount((float) $item->quantity, (bool) $item->is_split, ! is_null($item->parent_log_id));
-            $groupedBrackets[$b]['pieces'] += $effectivePieceCount;
-            $groupedBrackets[$b]['total_volume'] += (float) $item->total_volume;
-            $groupedBrackets[$b]['rate'] = (float) $item->price_per_cu_m;
-            $groupedBrackets[$b]['subtotal'] += (float) $item->subtotal;
-        }
-
-        // zero-out subtotals for brackets that have zero pieces (defensive: avoid aggregating stray volumes)
-        foreach ($groupedBrackets as $k => $row) {
-            if (($row['pieces'] ?? 0) <= 0) {
-                $groupedBrackets[$k]['subtotal'] = 0.0;
-                $groupedBrackets[$k]['total_volume'] = 0.0;
-            }
-        }
-
-        $breakdownBrackets = array_filter($groupedBrackets, fn($row) => $row['pieces'] > 0 || $row['total_volume'] > 0);
-        if (empty($breakdownBrackets)) {
-            $breakdownBrackets = $groupedBrackets;
-        }
-
-        $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
-        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
-        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+        $invoiceData = $this->buildInvoiceBreakdown($truckLoad);
 
         $invoiceNumber = $truckLoad->invoice_no ?? ('RMD-' . date('Y') . '-' . sprintf('%04d', $truckLoad->id));
         $preparedOn = optional($truckLoad->updated_at ?? $truckLoad->created_at)->format('M d, Y') ?? now()->format('M d, Y');
         $supplierName = $truckLoad->supplier->name ?? ($truckLoad->supplier_name ?? null) ?? 'N/A';
         $truckPlate = $truckLoad->truck_plate_no ?? $truckLoad->truck_plate ?? $truckLoad->plate_number ?? 'Empty';
 
-        return view('scaling.show', [
+        return view('scaling.show', array_merge([
             'scaleSheet' => $truckLoad,
             'truckLoad' => $truckLoad,
             'invoiceNumber' => $invoiceNumber,
             'preparedOn' => $preparedOn,
-            'breakdownBrackets' => $breakdownBrackets,
             'supplierName' => $supplierName,
             'truckPlate' => $truckPlate,
-            'calculatedGrossAmount' => $calculatedGrossAmount,
-            'calculatedDeductions' => $calculatedDeductions,
-            'calculatedNetPayable' => $calculatedNetPayable,
-        ]);
+        ], $invoiceData));
     }
 
     public function downloadInvoicePdf(TruckLoad $truckLoad)
     {
         $truckLoad->loadMissing(['supplier', 'scaleItems']);
-
-        $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
-        $groupedBrackets = [];
-
-        foreach ($bracketOrder as $b) {
-            $groupedBrackets[$b] = [
-                'bracket' => $b,
-                'pieces' => 0,
-                'total_volume' => 0.0,
-                'rate' => 0.0,
-                'subtotal' => 0.0,
-            ];
-        }
-
-        // explicitly query scale items for this truck load to avoid pulling unrelated rows
-        $items = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
-
-        foreach ($items as $item) {
-            $grade = $item->grade ?? 'Good';
-            $dia = (int) $item->diameter;
-
-            if ($grade === 'Sawmill') {
-                $b = 'Sawmill (SM)';
-            } elseif ($dia <= 24) {
-                $b = '20-24';
-            } elseif ($dia <= 28) {
-                $b = '26-28';
-            } elseif ($dia <= 38) {
-                $b = '30-38';
-            } elseif ($dia <= 48) {
-                $b = '40-48';
-            } elseif ($dia <= 58) {
-                $b = '50-58';
-            } else {
-                $b = '60-UP';
-            }
-
-            $effectivePieceCount = ScaleItem::resolveEffectivePieceCount((float) $item->quantity, (bool) $item->is_split, ! is_null($item->parent_log_id));
-            $groupedBrackets[$b]['pieces'] += $effectivePieceCount;
-            $groupedBrackets[$b]['total_volume'] += (float) $item->total_volume;
-            $groupedBrackets[$b]['rate'] = (float) $item->price_per_cu_m;
-            $groupedBrackets[$b]['subtotal'] += (float) $item->subtotal;
-        }
-
-        // zero-out subtotals for brackets that have zero pieces (defensive)
-        foreach ($groupedBrackets as $k => $row) {
-            if (($row['pieces'] ?? 0) <= 0) {
-                $groupedBrackets[$k]['subtotal'] = 0.0;
-                $groupedBrackets[$k]['total_volume'] = 0.0;
-            }
-        }
-
-        $breakdownBrackets = array_filter($groupedBrackets, fn($row) => $row['pieces'] > 0 || $row['total_volume'] > 0);
-        if (empty($breakdownBrackets)) {
-            $breakdownBrackets = $groupedBrackets;
-        }
-
-        $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
-        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
-        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
-
-        // Diagnostic logging: record breakdown for this sheet to help detect mismatches
-        try {
-            \Log::info('printInvoice breakdown', [
-                'truck_load_id' => $truckLoad->id,
-                'scale_sheet_no' => $truckLoad->scale_sheet_no,
-                'total_logs' => $truckLoad->total_logs,
-                'total_volume' => $truckLoad->total_volume,
-                'gross_amount' => $truckLoad->gross_amount,
-                'breakdown' => $breakdownBrackets,
-            ]);
-        } catch (\Throwable $e) {
-            // swallow logging errors to avoid affecting user flow
-        }
+        $invoiceData = $this->buildInvoiceBreakdown($truckLoad);
 
         $invoiceNumber = $truckLoad->invoice_no ?? ('RMD-' . date('Y') . '-' . sprintf('%04d', $truckLoad->id));
         $preparedOn = optional($truckLoad->updated_at ?? $truckLoad->created_at)->format('M d, Y') ?? now()->format('M d, Y');
         $supplierName = $truckLoad->supplier->name ?? ($truckLoad->supplier_name ?? null) ?? 'N/A';
         $truckPlate = $truckLoad->truck_plate_no ?? $truckLoad->truck_plate ?? $truckLoad->plate_number ?? 'Empty';
 
-        // Diagnostic logging for download action as well
         try {
             \Log::info('downloadInvoicePdf breakdown', [
                 'truck_load_id' => $truckLoad->id,
@@ -669,22 +534,18 @@ class ScalingController extends Controller
                 'total_logs' => $truckLoad->total_logs,
                 'total_volume' => $truckLoad->total_volume,
                 'gross_amount' => $truckLoad->gross_amount,
-                'breakdown' => $breakdownBrackets,
+                'breakdown' => $invoiceData['breakdownBrackets'],
             ]);
         } catch (\Throwable $e) {
         }
 
-        $pdf = Pdf::loadView('scaling.invoice-pdf-template', compact(
-            'truckLoad',
-            'invoiceNumber',
-            'preparedOn',
-            'breakdownBrackets',
-            'supplierName',
-            'truckPlate',
-            'calculatedGrossAmount',
-            'calculatedDeductions',
-            'calculatedNetPayable'
-        ))
+        $pdf = Pdf::loadView('scaling.invoice-pdf-template', array_merge([
+            'truckLoad' => $truckLoad,
+            'invoiceNumber' => $invoiceNumber,
+            'preparedOn' => $preparedOn,
+            'supplierName' => $supplierName,
+            'truckPlate' => $truckPlate,
+        ], $invoiceData))
         ->setPaper('a4', 'portrait')
         ->setOptions([
             'isRemoteEnabled' => true,
@@ -694,6 +555,68 @@ class ScalingController extends Controller
         ]);
 
         return $pdf->download('scale-sheet-' . ($truckLoad->scale_sheet_no ?: $truckLoad->id) . '.pdf');
+    }
+
+    protected function buildInvoiceBreakdown(TruckLoad $truckLoad): array
+    {
+        $truckLoad->loadMissing('scaleItems');
+
+        $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
+        $groupedBrackets = array_fill_keys($bracketOrder, [
+            'bracket' => null,
+            'pieces' => 0,
+            'total_volume' => 0.0,
+            'rate' => 0.0,
+            'subtotal' => 0.0,
+        ]);
+
+        foreach ($bracketOrder as $bracket) {
+            $groupedBrackets[$bracket]['bracket'] = $bracket;
+        }
+
+        foreach ($truckLoad->scaleItems as $item) {
+            $grade = $item->grade ?? 'Good';
+            $dia = (int) $item->diameter;
+
+            if ($grade === 'Sawmill' || str_contains($grade, 'Sawmill')) {
+                $b = 'Sawmill (SM)';
+            } elseif ($dia <= 24) {
+                $b = '20-24';
+            } elseif ($dia <= 28) {
+                $b = '26-28';
+            } elseif ($dia <= 38) {
+                $b = '30-38';
+            } elseif ($dia <= 48) {
+                $b = '40-48';
+            } elseif ($dia <= 58) {
+                $b = '50-58';
+            } else {
+                $b = '60-UP';
+            }
+
+            $groupedBrackets[$b]['pieces'] += ScaleItem::resolveEffectivePieceCount((float) $item->quantity, (bool) $item->is_split, !is_null($item->parent_log_id));
+            $groupedBrackets[$b]['total_volume'] += (float) $item->total_volume;
+            $groupedBrackets[$b]['rate'] = $groupedBrackets[$b]['rate'] > 0 ? $groupedBrackets[$b]['rate'] : (float) $item->price_per_cu_m;
+            $groupedBrackets[$b]['subtotal'] += (float) $item->subtotal;
+        }
+
+        // Preserve bracket totals even when child split rows have zero piece counts.
+        // The subtotal and volume must remain if any positive total_volume is present.
+        $breakdownBrackets = array_values(array_filter($groupedBrackets, fn($row) => ($row['pieces'] > 0 || $row['total_volume'] > 0 || $row['subtotal'] > 0)));
+        if (empty($breakdownBrackets)) {
+            $breakdownBrackets = array_values($groupedBrackets);
+        }
+
+        $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
+        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+
+        return [
+            'breakdownBrackets' => $breakdownBrackets,
+            'calculatedGrossAmount' => $calculatedGrossAmount,
+            'calculatedDeductions' => $calculatedDeductions,
+            'calculatedNetPayable' => $calculatedNetPayable,
+        ];
     }
 
 

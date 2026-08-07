@@ -28,6 +28,24 @@
     <form action="{{ route('scaling.store') }}" method="POST" id="scaleForm" class="space-y-8">
         @csrf
 
+        @if(session('error'))
+            <div class="rounded-2xl border border-rose-500 bg-rose-950/20 p-4 text-rose-200">
+                <p class="font-semibold">Submission failed:</p>
+                <p class="text-sm">{{ session('error') }}</p>
+            </div>
+        @endif
+
+        @if($errors->any())
+            <div class="rounded-2xl border border-rose-500 bg-rose-950/20 p-4 text-rose-200">
+                <p class="font-semibold">Please fix the following errors:</p>
+                <ul class="list-disc list-inside text-sm mt-2">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         <!-- 1. Header Information Section -->
         <div class="glass-panel p-6 rounded-2xl border border-slate-800 shadow-xl space-y-6">
             <h2 class="text-lg font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
@@ -400,21 +418,29 @@
                 <input type="hidden" name="items[${rowIndex}_A][is_split]" value="1">
                 <input type="hidden" name="items[${rowIndex}_A][split_group_id]" value="split_${rowIndex}">
                 <input type="hidden" name="items[${rowIndex}_A][parent_log_id]" value="">
+                <input type="hidden" name="items[${rowIndex}_A][split_side]" value="A">
                 <input type="hidden" name="items[${rowIndex}_A][category]" class="row-cat-hidden-a" value="${data.category}">
                 <input type="hidden" name="items[${rowIndex}_A][grade]" class="row-grade-hidden-a" value="${defaultGradeA}">
                 <input type="hidden" name="items[${rowIndex}_A][length]" class="row-len-hidden-a" value="${defaultLengthA}">
                 <input type="hidden" name="items[${rowIndex}_A][diameter]" class="row-dia-hidden-a" value="${defaultDiaA}">
                 <input type="hidden" name="items[${rowIndex}_A][quantity]" class="row-qty-hidden-a" value="${data.quantity}">
+                <input type="hidden" name="items[${rowIndex}_A][volume]" class="row-volume-hidden-a" value="0.000">
+                <input type="hidden" name="items[${rowIndex}_A][total_volume]" class="row-total-volume-hidden-a" value="0.000">
+                <input type="hidden" name="items[${rowIndex}_A][subtotal]" class="row-subtotal-hidden-a" value="0.00">
 
                 <!-- Part B hidden inputs -->
                 <input type="hidden" name="items[${rowIndex}_B][is_split]" value="1">
                 <input type="hidden" name="items[${rowIndex}_B][split_group_id]" value="split_${rowIndex}">
                 <input type="hidden" name="items[${rowIndex}_B][parent_log_id]" value="">
+                <input type="hidden" name="items[${rowIndex}_B][split_side]" value="B">
                 <input type="hidden" name="items[${rowIndex}_B][category]" class="row-cat-hidden-b" value="${data.category}">
                 <input type="hidden" name="items[${rowIndex}_B][grade]" class="row-grade-hidden-b" value="${defaultGradeB}">
                 <input type="hidden" name="items[${rowIndex}_B][length]" class="row-len-hidden-b" value="${defaultLengthB}">
                 <input type="hidden" name="items[${rowIndex}_B][diameter]" class="row-dia-hidden-b" value="${defaultDiaB}">
                 <input type="hidden" name="items[${rowIndex}_B][quantity]" class="row-qty-hidden-b" value="${data.quantity}">
+                <input type="hidden" name="items[${rowIndex}_B][volume]" class="row-volume-hidden-b" value="0.000">
+                <input type="hidden" name="items[${rowIndex}_B][total_volume]" class="row-total-volume-hidden-b" value="0.000">
+                <input type="hidden" name="items[${rowIndex}_B][subtotal]" class="row-subtotal-hidden-b" value="0.00">
 
                 <td class="px-3 py-3 text-center text-xs text-slate-500 font-mono row-num">1</td>
                 
@@ -518,6 +544,27 @@
                 tr.querySelector('.row-qty-hidden-a').value = qty;
                 tr.querySelector('.row-qty-hidden-b').value = qty;
 
+                const volA = diaA > 0 && lenA > 0 ? (0.7854 * Math.pow(diaA, 2) * lenA) / 10000 : 0;
+                const volB = diaB > 0 && lenB > 0 ? (0.7854 * Math.pow(diaB, 2) * lenB) / 10000 : 0;
+                const totVolA = qty * volA;
+                const totVolB = qty * volB;
+                const rateA = getMatchingRate(cat, lenA, diaA, gradeA);
+                const rateB = getMatchingRate(cat, lenB, diaB, gradeB);
+
+                const hiddenVolA = tr.querySelector('.row-volume-hidden-a');
+                const hiddenTotVolA = tr.querySelector('.row-total-volume-hidden-a');
+                const hiddenSubtotalA = tr.querySelector('.row-subtotal-hidden-a');
+                const hiddenVolB = tr.querySelector('.row-volume-hidden-b');
+                const hiddenTotVolB = tr.querySelector('.row-total-volume-hidden-b');
+                const hiddenSubtotalB = tr.querySelector('.row-subtotal-hidden-b');
+
+                if (hiddenVolA) hiddenVolA.value = volA.toFixed(3);
+                if (hiddenTotVolA) hiddenTotVolA.value = totVolA.toFixed(3);
+                if (hiddenSubtotalA) hiddenSubtotalA.value = (totVolA * rateA).toFixed(2);
+                if (hiddenVolB) hiddenVolB.value = volB.toFixed(3);
+                if (hiddenTotVolB) hiddenTotVolB.value = totVolB.toFixed(3);
+                if (hiddenSubtotalB) hiddenSubtotalB.value = (totVolB * rateB).toFixed(2);
+
                 // Style grade dropdowns dynamically
                 const selectA = tr.querySelector('.row-grade-a');
                 selectA.className = selectA.value === 'Sawmill' 
@@ -567,6 +614,9 @@
             const defaultLen = data.length || '2.6';
 
             tr.innerHTML = `
+                <input type="hidden" name="items[${rowIndex}][volume]" class="row-vol-hidden" value="0.000">
+                <input type="hidden" name="items[${rowIndex}][total_volume]" class="row-total-vol-hidden" value="0.000">
+                <input type="hidden" name="items[${rowIndex}][subtotal]" class="row-subtotal-hidden" value="0.00">
                 <td class="px-3 py-3 text-center text-xs text-slate-500 font-mono row-num">1</td>
                 
                 <td class="px-3 py-3">
@@ -704,6 +754,13 @@
             r.querySelector('.row-rate').textContent = `₱ ${rate.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             r.querySelector('.row-subtotal').textContent = qty > 0 ? `₱ ${subtotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '₱ 0.00';
 
+            const volHidden = r.querySelector('.row-vol-hidden');
+            const totVolHidden = r.querySelector('.row-total-vol-hidden');
+            const subtotalHidden = r.querySelector('.row-subtotal-hidden');
+            if (volHidden) volHidden.value = volPerLog.toFixed(3);
+            if (totVolHidden) totVolHidden.value = totVol.toFixed(3);
+            if (subtotalHidden) subtotalHidden.value = subtotal.toFixed(2);
+
             standardTotalLogs += qty;
             standardTotalVolume += totVol;
             standardGrossAmount += subtotal;
@@ -757,6 +814,20 @@
             `;
             
             r.querySelector('.row-subtotal').textContent = qty > 0 ? `₱ ${combinedSubtotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '₱ 0.00';
+
+            const volHiddenA = r.querySelector('.row-volume-hidden-a');
+            const totVolHiddenA = r.querySelector('.row-total-volume-hidden-a');
+            const subtotalHiddenA = r.querySelector('.row-subtotal-hidden-a');
+            const volHiddenB = r.querySelector('.row-volume-hidden-b');
+            const totVolHiddenB = r.querySelector('.row-total-volume-hidden-b');
+            const subtotalHiddenB = r.querySelector('.row-subtotal-hidden-b');
+
+            if (volHiddenA) volHiddenA.value = volA.toFixed(3);
+            if (totVolHiddenA) totVolHiddenA.value = (qty * volA).toFixed(3);
+            if (subtotalHiddenA) subtotalHiddenA.value = (qty * volA * rateA).toFixed(2);
+            if (volHiddenB) volHiddenB.value = volB.toFixed(3);
+            if (totVolHiddenB) totVolHiddenB.value = (qty * volB).toFixed(3);
+            if (subtotalHiddenB) subtotalHiddenB.value = (qty * volB * rateB).toFixed(2);
 
             // Split pieces rule: 1 pair = 1 PC
             splitTotalLogs += qty;

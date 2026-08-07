@@ -74,10 +74,12 @@ class ScaleItem extends Model
 
     /**
      * Brereton Volume Formula in Cubic Meters:
-     * V = (0.7854 * (d_cm)^2 * L_m) / 10000
+     * V = ((D1 + D2) / 2)^2 * L * 0.00007854
+     * For a single standard log where D1 = D2 = diameter in cm, this becomes:
+     * V = diameter^2 * L * 0.00007854
      */
     public static function calculateBreretonVolume(int $diameterCm, float $lengthM): float
     {
-        return round((0.7854 * pow($diameterCm, 2) * $lengthM) / 10000, 3);
+        return round($diameterCm * $diameterCm * $lengthM * 0.00007854, 3);
     }
 }
