@@ -69,8 +69,8 @@ class WoodScalingSeeder extends Seeder
             'address' => 'San Francisco, Agusan del Sur',
         ]);
 
-        // 2. Purge non-Falcata categories and seed Pure FALCATA Price Matrix
-        PriceMatrix::whereNotIn('category', ['FALCATA', 'SAWMILL'])->delete();
+        // 2. Preserve PEELABLE / F1(1.3/2.6) seed data while refreshing Pure FALCATA Price Matrix
+        PriceMatrix::whereNotIn('category', ['FALCATA', 'SAWMILL', 'PEELABLE / F1(1.3/2.6)'])->delete();
 
         $falcataRanges = [
             ['min' => 16, 'max' => 18, 'price' => 1400.00],

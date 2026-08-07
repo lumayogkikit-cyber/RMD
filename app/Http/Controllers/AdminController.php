@@ -25,7 +25,13 @@ class AdminController extends Controller
 
         $staffUsers = User::orderBy('name')->get();
         $suppliers = Supplier::orderBy('name')->get();
-        $priceMatrices = PriceMatrix::all();
+        $priceMatrices = PriceMatrix::orderBy('category')
+            ->orderBy('length')
+            ->orderBy('dia_min')
+            ->orderBy('dia_max')
+            ->get()
+            ->unique(fn ($row) => sprintf('%s|%s|%s|%s', strtoupper($row->category), $row->length, $row->dia_min, $row->dia_max))
+            ->values();
         $auditLogs = AuditLog::latest()->take(25)->get();
         $completedLoads = TruckLoad::with('supplier')->latest()->paginate(10);
 
