@@ -126,21 +126,6 @@
                 </button>
             </form>
 
-            <!-- Demo Quick Click Credentials -->
-            <div class="border-t border-slate-800 pt-4 space-y-2">
-                <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-center">Demo Quick Fill Accounts</div>
-                <div class="grid grid-cols-2 gap-2">
-                    <button type="button" onclick="fillCreds('superadmin@rmd.com', 'password')" class="p-2 bg-slate-900 hover:bg-slate-800 border border-amber-500/30 rounded-lg text-left transition-all">
-                        <div class="text-xs font-bold text-amber-400 flex items-center gap-1"><i class="fa-solid fa-crown text-[10px]"></i> Super Admin</div>
-                        <div class="text-[10px] text-slate-400 font-mono">superadmin@rmd.com</div>
-                    </button>
-                    <button type="button" onclick="fillCreds('scaler@rmd.com', 'password')" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-left transition-all">
-                        <div class="text-xs font-bold text-slate-200 flex items-center gap-1"><i class="fa-solid fa-user text-[10px]"></i> Scaler Staff</div>
-                        <div class="text-[10px] text-slate-400 font-mono">scaler@rmd.com</div>
-                    </button>
-                </div>
-            </div>
-
         </div>
 
         <div class="text-center text-xs text-slate-500">
@@ -148,13 +133,6 @@
         </div>
 
     </div>
-
-    <script>
-        function fillCreds(email, password) {
-            document.getElementById('email').value = email;
-            document.getElementById('password').value = password;
-        }
-    </script>
 
 </body>
 </html>
