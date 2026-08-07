@@ -336,6 +336,10 @@
                             <span class="value">₱ {{ number_format($truckLoad->gross_amount, 2) }}</span>
                         </div>
                         <div class="row">
+                            <span class="label">Driver's Assistance</span>
+                            <span class="value">+ ₱ {{ number_format($truckLoad->drivers_assistance, 2) }}</span>
+                        </div>
+                        <div class="row">
                             <span class="label">Total Deductions</span>
                             <span class="value">₱ {{ number_format($truckLoad->total_deductions, 2) }}</span>
                         </div>

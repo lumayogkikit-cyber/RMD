@@ -444,8 +444,8 @@ class ScalingController extends Controller
                 }
             }
 
-            $totalDeductions = $driversAssistance + $expensesDeduction + $travelPaper + $truckingDeduction;
-            $netPayable = $grossAmount - $totalDeductions;
+            $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction;
+            $netPayable = $grossAmount - $totalDeductions + $driversAssistance;
 
             $truckLoad->update([
                 'total_logs' => $totalLogs,
@@ -561,7 +561,7 @@ class ScalingController extends Controller
     {
         $truckLoad->loadMissing('scaleItems');
 
-        $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
+        $bracketOrder = ['16-18', '20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
         $groupedBrackets = array_fill_keys($bracketOrder, [
             'bracket' => null,
             'pieces' => 0,
@@ -580,6 +580,8 @@ class ScalingController extends Controller
 
             if ($grade === 'Sawmill' || str_contains($grade, 'Sawmill')) {
                 $b = 'Sawmill (SM)';
+            } elseif ($dia >= 16 && $dia <= 18) {
+                $b = '16-18';
             } elseif ($dia <= 24) {
                 $b = '20-24';
             } elseif ($dia <= 28) {
@@ -596,7 +598,15 @@ class ScalingController extends Controller
 
             $groupedBrackets[$b]['pieces'] += ScaleItem::resolveEffectivePieceCount((float) $item->quantity, (bool) $item->is_split, !is_null($item->parent_log_id));
             $groupedBrackets[$b]['total_volume'] += (float) $item->total_volume;
-            $groupedBrackets[$b]['rate'] = $groupedBrackets[$b]['rate'] > 0 ? $groupedBrackets[$b]['rate'] : (float) $item->price_per_cu_m;
+
+            $category = $item->wood_category ?? ($item->category ?? 'FALCATA');
+            $itemRate = PriceMatrix::matchRate($category, (float) $item->length, (int) $item->diameter, $grade);
+            if ($groupedBrackets[$b]['rate'] <= 0 && $itemRate > 0) {
+                $groupedBrackets[$b]['rate'] = $itemRate;
+            } elseif ($groupedBrackets[$b]['rate'] <= 0) {
+                $groupedBrackets[$b]['rate'] = (float) $item->price_per_cu_m;
+            }
+
             $groupedBrackets[$b]['subtotal'] += (float) $item->subtotal;
         }
 
@@ -608,8 +618,8 @@ class ScalingController extends Controller
         }
 
         $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
-        $calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
-        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+        $calculatedDeductions = round((float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+        $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions + (float) $truckLoad->drivers_assistance, 2);
 
         return [
             'breakdownBrackets' => $breakdownBrackets,

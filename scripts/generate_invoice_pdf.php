@@ -23,7 +23,7 @@ if (! $truckLoad) {
 
 $items = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
 
-$bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
+$bracketOrder = ['16-18', '20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
 $grouped = [];
 foreach ($bracketOrder as $b) {
     $grouped[$b] = ['bracket' => $b, 'pieces' => 0, 'total_volume' => 0.0, 'rate' => 0.0, 'subtotal' => 0.0];
@@ -34,6 +34,8 @@ foreach ($items as $item) {
     $dia = (int) $item->diameter;
     if ($grade === 'Sawmill') {
         $b = 'Sawmill (SM)';
+    } elseif ($dia >= 16 && $dia <= 18) {
+        $b = '16-18';
     } elseif ($dia <= 24) {
         $b = '20-24';
     } elseif ($dia <= 28) {
@@ -68,8 +70,8 @@ if (empty($breakdown)) {
 }
 
 $calculatedGrossAmount = round(array_sum(array_column($breakdown, 'subtotal')), 2);
-$calculatedDeductions = round((float) $truckLoad->drivers_assistance + (float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
-$calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions, 2);
+$calculatedDeductions = round((float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+$calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions + (float) $truckLoad->drivers_assistance, 2);
 
 echo "TruckLoad id={$truckLoad->id}\n";
 echo "Scale Sheet #: {$truckLoad->scale_sheet_no}\n";

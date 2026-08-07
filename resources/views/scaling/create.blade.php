@@ -295,6 +295,10 @@
                             <span>Less: Total Deductions:</span>
                             <span class="font-mono font-bold text-lg" id="summaryDeductions">- ₱ 0.00</span>
                         </div>
+                        <div class="flex justify-between items-center text-emerald-400">
+                            <span>Add Driver's Assistance:</span>
+                            <span class="font-mono font-bold text-lg" id="summaryDriverAssistance">+ ₱ 0.00</span>
+                        </div>
 
                         <div class="bg-slate-900/90 p-4 rounded-xl border border-amber-500/40 mt-4">
                             <div class="text-xs uppercase tracking-wider text-amber-300 font-semibold mb-1">Net Amount Payable to Supplier</div>
@@ -845,8 +849,8 @@
         const travelPaper = parseFloat(document.getElementById('travel_paper_deduction').value) || 0;
         const truckingDeduction = parseFloat(document.getElementById('trucking_deduction').value) || 0;
 
-        const totalDeductions = driversAssistance + expensesDeduction + travelPaper + truckingDeduction;
-        const netPayable = grandGrossAmount - totalDeductions;
+        const totalDeductions = expensesDeduction + travelPaper + truckingDeduction;
+        const netPayable = grandGrossAmount - totalDeductions + driversAssistance;
 
         // Update Footers
         document.getElementById('tfootTotalLogs').textContent = Number(standardTotalLogs.toFixed(2)).toString();
@@ -862,6 +866,7 @@
         document.getElementById('summaryTotalVol').textContent = `${grandTotalVolume.toFixed(3)} m³`;
         document.getElementById('summaryGrossVal').textContent = `₱ ${grandGrossAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('summaryDeductions').textContent = `- ₱ ${totalDeductions.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        document.getElementById('summaryDriverAssistance').textContent = `+ ₱ ${driversAssistance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         document.getElementById('summaryNetPayable').textContent = `₱ ${netPayable.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
     }
 
