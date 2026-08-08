@@ -488,7 +488,7 @@ class ScalingController extends Controller
         $truckLoad->loadMissing(['supplier']);
 
         return view('scaling.edit', [
-            'truckLoad' => $truckLoad,
+            'sheet' => $truckLoad,
         ]);
     }
 
