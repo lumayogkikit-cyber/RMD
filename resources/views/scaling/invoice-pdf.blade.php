@@ -401,6 +401,12 @@
                                 <span style="display: table-cell; text-align: left; color: #475569;">Cash Advance</span>
                                 <span style="display: table-cell; text-align: right; font-weight: 700; font-family: monospace, sans-serif;">- ₱ {{ number_format($truckLoad->cash_advance, 2) }}</span>
                             </div>
+                            @if(($truckLoad->other_deduction_amount ?? 0) > 0)
+                                <div style="display: table; width: 100%; margin-bottom: 8px;">
+                                    <span style="display: table-cell; text-align: left; color: #475569;">Less {{ $truckLoad->other_deduction_label ?: 'Other Deduction' }}:</span>
+                                    <span style="display: table-cell; text-align: right; font-weight: 700; font-family: monospace, sans-serif; color: #dc2626;">- ₱ {{ number_format($truckLoad->other_deduction_amount, 2) }}</span>
+                                </div>
+                            @endif
                             <div style="border-top: 1px solid #cbd5e1; margin: 6px 0;"></div>
                             <div style="display: table; width: 100%; margin-top: 6px;">
                                 <span style="display: table-cell; text-align: left; font-weight: 800; color: #334155;">TOTAL DEDUCTIONS</span>

@@ -40,6 +40,9 @@
         </div>
 
         <div class="flex items-center gap-3">
+            <a href="{{ route('scaling.edit', $truckLoad->id) }}" class="bg-slate-700/20 hover:bg-slate-700/30 text-slate-100 font-bold px-6 py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-slate-950/20 flex items-center gap-2 border border-slate-500/20">
+                <i class="fa-solid fa-pen-to-square text-sm"></i> Edit Scale Sheet
+            </a>
             <button onclick="window.print()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-emerald-950/50 flex items-center gap-2 border border-emerald-400/30">
                 <i class="fa-solid fa-print text-sm"></i> Print Official Invoice
             </button>
@@ -148,6 +151,7 @@
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Travel Paper / Permit:</span><span class="font-mono">₱ {{ number_format($scaleSheet->travel_paper_deduction, 3) }}</span></div>
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Trucking Deduction:</span><span class="font-mono">₱ {{ number_format($scaleSheet->trucking_deduction, 3) }}</span></div>
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Cash Advance:</span><span class="font-mono">₱ {{ number_format($scaleSheet->cash_advance, 3) }}</span></div>
+                    <div class="flex justify-between text-slate-300 print:text-black"><span>{{ $scaleSheet->other_deduction_label ?: 'Other Deduction' }}:</span><span class="font-mono">₱ {{ number_format($scaleSheet->other_deduction_amount, 3) }}</span></div>
                     <div class="flex justify-between font-bold text-rose-400 print:text-black border-t border-slate-700 print:border-black pt-2 text-sm"><span>Total Deductions:</span><span class="font-mono">- ₱ {{ number_format($calculatedDeductions, 3) }}</span></div>
                 </div>
             </div>

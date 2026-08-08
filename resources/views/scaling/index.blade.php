@@ -237,6 +237,9 @@
                             </td>
                             <td class="px-6 py-4 text-center no-print">
                                 <div class="flex items-center justify-center gap-2">
+                                    <a href="{{ route('scaling.edit', $load->id) }}" class="bg-slate-700/10 hover:bg-slate-700/20 text-slate-300 border border-slate-600/50 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Edit Scale Sheet">
+                                        <i class="fa-solid fa-pen-to-square"></i> Edit
+                                    </a>
                                     <a href="{{ route('scaling.show', $load->id) }}" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="View Scale Sheet Invoice">
                                         <i class="fa-solid fa-receipt"></i> Invoice
                                     </a>

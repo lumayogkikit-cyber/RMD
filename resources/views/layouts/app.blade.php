@@ -181,8 +181,8 @@
     </footer>
 </footer>
 
-<!-- Alpine.js for lightweight reactivity (used by report filters) -->
-<script defer src="https://unpkg.com/alpinejs@3.12.0/dist/cdn.min.js"></script>
+    @stack('scripts')
 
-</body>
+    <!-- Alpine.js for lightweight reactivity (used by report filters) -->
+    <script defer src="https://unpkg.com/alpinejs@3.12.0/dist/cdn.min.js"></script>
 </html>

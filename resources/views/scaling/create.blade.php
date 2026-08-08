@@ -268,6 +268,16 @@
                         <label for="cash_advance" class="block text-xs font-semibold text-slate-400 mb-1">Cash Advance (₱)</label>
                         <input type="number" step="0.01" min="0" name="cash_advance" id="cash_advance" value="{{ old('cash_advance', '0.00') }}" class="deduction-input w-full bg-slate-900 border border-slate-700 text-slate-100 font-mono text-sm rounded-xl px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none">
                     </div>
+
+                    <!-- Other Deduction -->
+                    <div>
+                        <label for="other_deduction_label" class="block text-xs font-semibold text-slate-400 mb-1">Other Deduction Label</label>
+                        <input type="text" name="other_deduction_label" id="other_deduction_label" value="{{ old('other_deduction_label', '') }}" placeholder="e.g. Fuel / Inspection" class="w-full bg-slate-900 border border-slate-700 text-slate-100 font-mono text-sm rounded-xl px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none">
+                    </div>
+                    <div>
+                        <label for="other_deduction_amount" class="block text-xs font-semibold text-slate-400 mb-1">Other Deduction Amount (₱)</label>
+                        <input type="number" step="0.01" min="0" name="other_deduction_amount" id="other_deduction_amount" value="{{ old('other_deduction_amount', '0.00') }}" class="deduction-input w-full bg-slate-900 border border-slate-700 text-slate-100 font-mono text-sm rounded-xl px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none">
+                    </div>
                 </div>
 
                 <!-- Notes / Remarks -->
@@ -855,8 +865,9 @@
         const travelPaper = parseFloat(document.getElementById('travel_paper_deduction').value) || 0;
         const truckingDeduction = parseFloat(document.getElementById('trucking_deduction').value) || 0;
         const cashAdvance = parseFloat(document.getElementById('cash_advance').value) || 0;
+        const otherDeductionAmount = parseFloat(document.getElementById('other_deduction_amount').value) || 0;
 
-        const totalDeductions = expensesDeduction + travelPaper + truckingDeduction + cashAdvance;
+        const totalDeductions = expensesDeduction + travelPaper + truckingDeduction + cashAdvance + otherDeductionAmount;
         const netPayable = grandGrossAmount - totalDeductions + driversAssistance;
 
         // Update Footers
@@ -929,6 +940,12 @@
         document.querySelectorAll('.deduction-input').forEach(input => {
             input.addEventListener('input', recalculateAll);
         });
+
+        const otherDeductionLabelInput = document.getElementById('other_deduction_label');
+        if (otherDeductionLabelInput) {
+            otherDeductionLabelInput.addEventListener('input', recalculateAll);
+            otherDeductionLabelInput.addEventListener('change', recalculateAll);
+        }
 
         // Refresh Prices Button (AJAX) - fetch latest price matrix and categories
         const refreshBtn = document.getElementById('refreshPricesBtn');

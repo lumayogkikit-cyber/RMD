@@ -15,6 +15,7 @@ use Illuminate\Validation\ValidationException;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB as FacadesDB;
+use Illuminate\Support\Str;
 
 class ScalingController extends Controller
 {
@@ -283,6 +284,8 @@ class ScalingController extends Controller
             'travel_paper_deduction' => 'nullable|numeric|min:0',
             'trucking_deduction' => 'nullable|numeric|min:0',
             'cash_advance' => 'nullable|numeric|min:0',
+            'other_deduction_label' => 'nullable|string|max:150',
+            'other_deduction_amount' => 'nullable|numeric|min:0',
             'items' => 'required|array|min:1',
             'items.*.category' => 'required|string|max:120',
             'items.*.grade' => 'required|string|max:100',
@@ -316,6 +319,8 @@ class ScalingController extends Controller
             $travelPaper = (float) ($validated['travel_paper_deduction'] ?? 0);
             $truckingDeduction = (float) ($validated['trucking_deduction'] ?? 0);
             $cashAdvance = (float) ($validated['cash_advance'] ?? 0);
+            $otherDeductionLabel = trim($validated['other_deduction_label'] ?? '');
+            $otherDeductionAmount = (float) ($validated['other_deduction_amount'] ?? 0);
 
             // Invoice number generation
             $currentYear = date('Y', strtotime($validated['date_scaled']));
@@ -349,6 +354,8 @@ class ScalingController extends Controller
                 'travel_paper_deduction' => $travelPaper,
                 'trucking_deduction' => $truckingDeduction,
                 'cash_advance' => $cashAdvance,
+                'other_deduction_label' => $otherDeductionLabel ?: null,
+                'other_deduction_amount' => $otherDeductionAmount,
             ]);
 
             $totalLogs = 0;
@@ -447,7 +454,7 @@ class ScalingController extends Controller
                 }
             }
 
-            $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction + $cashAdvance;
+            $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction + $cashAdvance + $otherDeductionAmount;
             $netPayable = $grossAmount - $totalDeductions + $driversAssistance;
 
             $truckLoad->update([
@@ -471,6 +478,62 @@ class ScalingController extends Controller
             Log::error('Scaling store failed', ['error' => $e->getMessage()]);
             return redirect()->back()->withInput()->with('error', 'Error saving scale sheet: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Show the form for editing an existing scale sheet.
+     */
+    public function edit(TruckLoad $truckLoad)
+    {
+        $truckLoad->loadMissing(['supplier']);
+
+        return view('scaling.edit', [
+            'truckLoad' => $truckLoad,
+        ]);
+    }
+
+    /**
+     * Update the specified scale sheet in storage.
+     */
+    public function update(Request $request, TruckLoad $truckLoad)
+    {
+        $validated = $request->validate([
+            'drivers_assistance' => 'nullable|numeric|min:0',
+            'expenses_deduction' => 'nullable|numeric|min:0',
+            'travel_paper_deduction' => 'nullable|numeric|min:0',
+            'trucking_deduction' => 'nullable|numeric|min:0',
+            'cash_advance' => 'nullable|numeric|min:0',
+            'other_deduction_label' => 'nullable|string|max:150',
+            'other_deduction_amount' => 'nullable|numeric|min:0',
+            'notes' => 'nullable|string',
+        ]);
+
+        $driversAssistance = (float) ($validated['drivers_assistance'] ?? 0);
+        $expensesDeduction = (float) ($validated['expenses_deduction'] ?? 0);
+        $travelPaper = (float) ($validated['travel_paper_deduction'] ?? 0);
+        $truckingDeduction = (float) ($validated['trucking_deduction'] ?? 0);
+        $cashAdvance = (float) ($validated['cash_advance'] ?? 0);
+        $otherDeductionLabel = trim($validated['other_deduction_label'] ?? '');
+        $otherDeductionAmount = (float) ($validated['other_deduction_amount'] ?? 0);
+
+        $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction + $cashAdvance + $otherDeductionAmount;
+        $netPayable = (float) $truckLoad->gross_amount - $totalDeductions + $driversAssistance;
+
+        $truckLoad->update([
+            'drivers_assistance' => $driversAssistance,
+            'expenses_deduction' => $expensesDeduction,
+            'travel_paper_deduction' => $travelPaper,
+            'trucking_deduction' => $truckingDeduction,
+            'cash_advance' => $cashAdvance,
+            'other_deduction_label' => $otherDeductionLabel ?: null,
+            'other_deduction_amount' => $otherDeductionAmount,
+            'total_deductions' => round($totalDeductions, 2),
+            'net_payable' => round($netPayable, 2),
+            'notes' => $validated['notes'] ?? $truckLoad->notes,
+        ]);
+
+        return redirect()->route('scaling.show', $truckLoad->id)
+            ->with('success', "Scale Sheet #{$truckLoad->scale_sheet_no} updated successfully.");
     }
 
     /**
@@ -628,7 +691,8 @@ class ScalingController extends Controller
             (float) $truckLoad->expenses_deduction
             + (float) $truckLoad->travel_paper_deduction
             + (float) $truckLoad->trucking_deduction
-            + (float) $truckLoad->cash_advance,
+            + (float) $truckLoad->cash_advance
+            + (float) $truckLoad->other_deduction_amount,
             2
         );
         $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions + (float) $truckLoad->drivers_assistance, 2);

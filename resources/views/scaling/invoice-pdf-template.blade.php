@@ -217,8 +217,10 @@
         $travel_paper = $truckLoad->travel_paper_deduction;
         $trucking_deduction = $truckLoad->trucking_deduction;
         $cash_advance = $truckLoad->cash_advance;
-        $total_deductions = $truckLoad->total_deductions;
-        $net_payable = $truckLoad->net_payable;
+        $other_deduction_label = trim($truckLoad->other_deduction_label ?: 'Other Deduction');
+        $other_deduction_amount = (float) $truckLoad->other_deduction_amount;
+        $total_deductions = $calculatedDeductions;
+        $net_payable = $calculatedNetPayable;
     @endphp
 
     <!-- WOOD SCALING BREAKDOWN TABLE -->
@@ -272,6 +274,9 @@
                             <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">Travel Paper / Permit: <span style="float: right;">- ₱ {{ number_format($travel_paper, 2) }}</span></div>
                             <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">Trucking Deduction: <span style="float: right;">- ₱ {{ number_format($trucking_deduction, 2) }}</span></div>
                             <div style="font-size: 9.5px; color: #475569; margin-bottom: 6px;">Cash Advance: <span style="float: right;">- ₱ {{ number_format($cash_advance, 2) }}</span></div>
+                            @if(($other_deduction_amount ?? 0) > 0)
+                                <div style="font-size: 9.5px; color: #475569; margin-bottom: 6px;">Less {{ $other_deduction_label }}: <span style="float: right; color: #dc2626;">- ₱ {{ number_format($other_deduction_amount, 2) }}</span></div>
+                            @endif
                             <hr style="border:none; border-top:1px solid #cbd5e1; margin: 6px 0;" />
                             <div style="font-size: 10px; font-weight: 800;">TOTAL DEDUCTIONS: <span style="float: right;">- ₱ {{ number_format($total_deductions, 2) }}</span></div>
                         </td>
