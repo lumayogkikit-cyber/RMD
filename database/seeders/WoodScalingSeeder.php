@@ -127,6 +127,7 @@ class WoodScalingSeeder extends Seeder
                 'expenses_deduction' => 250.00,
                 'travel_paper_deduction' => 300.00,
                 'trucking_deduction' => 1200.00,
+                'cash_advance' => 0.00,
                 'scaled_by' => 'J. Boholst (Scaler)',
                 'notes' => 'First batch delivery of Falcata and Lauan logs.',
             ]
@@ -167,14 +168,16 @@ class WoodScalingSeeder extends Seeder
                 $grossVal += $subtotal;
             }
 
-            $totalDeductions = 500.00 + 250.00 + 300.00 + 1200.00;
-            $netPayable = $grossVal - $totalDeductions;
+            $cashAdvance = 0.00;
+            $totalDeductions = 500.00 + 250.00 + 300.00 + 1200.00 + $cashAdvance;
+            $netPayable = $grossVal - $totalDeductions + 500.00;
 
             $load->update([
                 'total_logs' => $totalLogs,
                 'total_volume' => round($totalVol, 3),
                 'gross_amount' => round($grossVal, 3),
                 'total_deductions' => round($totalDeductions, 3),
+                'cash_advance' => $cashAdvance,
                 'net_payable' => round($netPayable, 3),
             ]);
         }

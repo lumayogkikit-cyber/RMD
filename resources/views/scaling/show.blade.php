@@ -147,6 +147,7 @@
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Expenses Deduction:</span><span class="font-mono">₱ {{ number_format($scaleSheet->expenses_deduction, 3) }}</span></div>
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Travel Paper / Permit:</span><span class="font-mono">₱ {{ number_format($scaleSheet->travel_paper_deduction, 3) }}</span></div>
                     <div class="flex justify-between text-slate-300 print:text-black"><span>Trucking Deduction:</span><span class="font-mono">₱ {{ number_format($scaleSheet->trucking_deduction, 3) }}</span></div>
+                    <div class="flex justify-between text-slate-300 print:text-black"><span>Cash Advance:</span><span class="font-mono">₱ {{ number_format($scaleSheet->cash_advance, 3) }}</span></div>
                     <div class="flex justify-between font-bold text-rose-400 print:text-black border-t border-slate-700 print:border-black pt-2 text-sm"><span>Total Deductions:</span><span class="font-mono">- ₱ {{ number_format($calculatedDeductions, 3) }}</span></div>
                 </div>
             </div>

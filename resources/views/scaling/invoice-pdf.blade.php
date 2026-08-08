@@ -5,8 +5,8 @@
     <title>Invoice {{ $invoiceNumber }} - RMD Corporation</title>
     <style>
         @page {
-            size: A4 portrait;
-            margin: 12mm;
+            size: letter portrait;
+            margin: 15px;
         }
 
         body {
@@ -26,22 +26,22 @@
 
         .paper {
             width: 100%;
-            padding: 0;
+            padding: 8px;
             border: 1px solid #e2e8f0;
-            border-radius: 18px;
+            border-radius: 14px;
             background: #ffffff;
             box-sizing: border-box;
         }
 
         .header {
             text-align: center;
-            padding: 16px 0 10px;
+            padding: 10px 0 6px;
         }
 
         .logo {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 10px;
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 8px;
             border-radius: 9999px;
             object-fit: cover;
         }
@@ -62,11 +62,11 @@
         }
 
         .subtitle {
-            font-size: 11px;
+            font-size: 10px;
             color: #475569;
-            margin: 8px auto 0;
+            margin: 6px auto 0;
             max-width: 520px;
-            line-height: 1.4;
+            line-height: 1.35;
         }
 
         .details {
@@ -78,7 +78,7 @@
         }
 
         .details td {
-            padding: 10px 12px;
+            padding: 4px 8px;
             vertical-align: top;
             font-size: 10px;
         }
@@ -108,14 +108,15 @@
         .breakdown {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 14px;
             font-size: 10px;
         }
 
         .breakdown th,
         .breakdown td {
             border: 1px solid #e2e8f0;
-            padding: 10px 8px;
+            padding: 6px 12px;
+            font-size: 9px;
         }
 
         .breakdown th {
@@ -124,7 +125,18 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            font-size: 9px;
+        }
+
+        .breakdown td:first-child,
+        .breakdown th:first-child {
+            text-align: left;
+            padding-left: 10px;
+        }
+
+        .breakdown td:nth-child(n+2),
+        .breakdown th:nth-child(n+2) {
+            text-align: right;
+            padding-right: 15px;
         }
 
         .breakdown tbody tr:nth-child(odd) {
@@ -133,6 +145,11 @@
 
         .breakdown tbody tr:nth-child(even) {
             background: #f8fafc;
+        }
+
+        .breakdown tfoot tr {
+            background: #f1f5f9;
+            font-weight: 700;
         }
 
         .text-right {
@@ -146,7 +163,7 @@
         .summary {
             display: table;
             width: 100%;
-            margin-top: 18px;
+            margin-top: 12px;
             border-collapse: collapse;
         }
 
@@ -158,7 +175,7 @@
         }
 
         .summary-left {
-            padding-right: 12px;
+            padding-right: 8px;
             width: 60%;
         }
 
@@ -166,10 +183,15 @@
             width: 40%;
         }
 
+        .summary-box .row,
+        .summary-highlight .row {
+            margin-bottom: 6px;
+        }
+
         .summary-box,
         .summary-highlight {
             border-radius: 14px;
-            padding: 16px;
+            padding: 8px 12px;
             background: #ffffff;
             border: 1px solid #cbd5e1;
         }
@@ -305,43 +327,138 @@
                 </tr>
             </table>
 
-            <table class="breakdown" cellpadding="0" cellspacing="0">
+            @php
+                $total_pieces = array_sum(array_column($breakdownBrackets, 'pieces'));
+                $total_volume = array_sum(array_column($breakdownBrackets, 'total_volume'));
+                $gross_wood_amount = $calculatedGrossAmount;
+            @endphp
+
+            <table style="width: 100%; border-collapse: collapse;" cellpadding="0" cellspacing="0">
                 <thead>
-                    <tr>
-                        <th>SIZE / GRADE BRACKET</th>
-                        <th class="text-right">PIECES</th>
-                        <th class="text-right">TOTAL VOLUME (M³)</th>
-                        <th class="text-right">RATE (₱/M³)</th>
-                        <th class="text-right">SUBTOTAL (₱)</th>
+                    <tr style="background-color: #f8fafc;">
+                        <th style="width: 30%; text-align: left; padding: 8px;">SIZE / GRADE BRACKET</th>
+                        <th style="width: 15%; text-align: center; padding: 8px;">PIECES</th>
+                        <th style="width: 20%; text-align: center; padding: 8px;">TOTAL VOLUME (M³)</th>
+                        <th style="width: 17%; text-align: right; padding: 8px;">RATE (₱/M³)</th>
+                        <th style="width: 18%; text-align: right; padding: 8px;">SUBTOTAL (₱)</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($breakdownBrackets as $bracket)
                         <tr>
-                            <td class="monospace">{{ $bracket['bracket'] }}</td>
-                            <td class="text-right monospace">{{ number_format($bracket['pieces']) }}</td>
-                            <td class="text-right monospace">{{ number_format($bracket['total_volume'], 3) }}</td>
-                            <td class="text-right monospace">{{ $bracket['rate'] > 0 ? '₱ ' . number_format($bracket['rate'], 2) : '-' }}</td>
-                            <td class="text-right monospace">₱ {{ number_format($bracket['subtotal'] ?? 0, 2) }}</td>
+                            <td style="text-align: left; padding: 8px; font-weight: 700;">{{ $bracket['bracket'] }}</td>
+                            <td style="text-align: center; padding: 8px;">{{ number_format($bracket['pieces']) }}</td>
+                            <td style="text-align: center; padding: 8px; font-weight: 700;">{{ number_format($bracket['total_volume'], 3) }}</td>
+                            <td style="text-align: right; padding: 8px;">{{ $bracket['rate'] > 0 ? '₱ ' . number_format($bracket['rate'], 2) : '-' }}</td>
+                            <td style="text-align: right; padding: 8px; font-weight: 700;">₱ {{ number_format($bracket['subtotal'] ?? 0, 2) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
+                <tfoot>
+                    <!-- TOTAL ROW FIX -->
+                    <tr style="font-weight: bold; background-color: #f8fafc; border-top: 2px solid #000;">
+                        <td align="left" style="width: 30%; text-align: left !important; padding: 8px 10px; font-weight: bold;">
+                            TOTAL
+                        </td>
+                        <td align="center" style="width: 15%; text-align: center !important; padding: 8px; font-weight: bold;">
+                            {{ number_format($total_pieces) }}
+                        </td>
+                        <td align="center" style="width: 20%; text-align: center !important; padding: 8px; font-weight: bold;">
+                            {{ number_format($total_volume, 3) }}
+                        </td>
+                        <td align="right" style="width: 17%; text-align: right !important; padding: 8px 10px; font-weight: bold;">
+                            -
+                        </td>
+                        <td align="right" style="width: 18%; text-align: right !important; padding: 8px 10px; font-weight: bold;">
+                            ₱ {{ number_format($gross_wood_amount, 2) }}
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
 
-            <div class="summary">
+            <table style="width: 100%; border-collapse: separate; border-spacing: 10px 0; margin-top: 10px;">
+                <tr>
+                    <td style="width: 50%; vertical-align: top; padding: 0;">
+                        <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; min-height: 190px; box-sizing: border-box;">
+                            <div style="font-size: 10px; font-weight: 800; margin-bottom: 10px;">DEDUCTIONS BREAKDOWN</div>
+                            <div style="display: table; width: 100%; margin-bottom: 6px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">Add Driver's Assistance</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700; font-family: monospace, sans-serif; color: #0f172a;">+ ₱ {{ number_format($truckLoad->drivers_assistance, 2) }}</span>
+                            </div>
+                            <div style="display: table; width: 100%; margin-bottom: 6px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">Expenses Deduction</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700; font-family: monospace, sans-serif;">- ₱ {{ number_format($truckLoad->expenses_deduction, 2) }}</span>
+                            </div>
+                            <div style="display: table; width: 100%; margin-bottom: 6px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">Travel Paper / Permit</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700; font-family: monospace, sans-serif;">- ₱ {{ number_format($truckLoad->travel_paper_deduction, 2) }}</span>
+                            </div>
+                            <div style="display: table; width: 100%; margin-bottom: 6px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">Trucking Deduction</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700; font-family: monospace, sans-serif;">- ₱ {{ number_format($truckLoad->trucking_deduction, 2) }}</span>
+                            </div>
+                            <div style="display: table; width: 100%; margin-bottom: 8px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">Cash Advance</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700; font-family: monospace, sans-serif;">- ₱ {{ number_format($truckLoad->cash_advance, 2) }}</span>
+                            </div>
+                            <div style="border-top: 1px solid #cbd5e1; margin: 6px 0;"></div>
+                            <div style="display: table; width: 100%; margin-top: 6px;">
+                                <span style="display: table-cell; text-align: left; font-weight: 800; color: #334155;">TOTAL DEDUCTIONS</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 800; font-family: monospace, sans-serif; color: #0f172a;">- ₱ {{ number_format($truckLoad->total_deductions, 2) }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="width: 50%; vertical-align: top; padding: 0;">
+                        <div style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; min-height: 190px; box-sizing: border-box;">
+                            <div style="font-size: 10px; font-weight: 800; margin-bottom: 10px;">FINANCIAL SUMMARY</div>
+                            <div style="display: table; width: 100%; margin-bottom: 6px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">GROSS WOOD AMOUNT</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700;">₱ {{ number_format($gross_wood_amount, 2) }}</span>
+                            </div>
+                            <div style="display: table; width: 100%; margin-bottom: 6px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">ADD DRIVER'S ASSISTANCE</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700;">+ ₱ {{ number_format($truckLoad->drivers_assistance, 2) }}</span>
+                            </div>
+                            <div style="display: table; width: 100%; margin-bottom: 8px;">
+                                <span style="display: table-cell; text-align: left; color: #475569;">LESS TOTAL DEDUCTIONS</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 700;">- ₱ {{ number_format($truckLoad->total_deductions, 2) }}</span>
+                            </div>
+                            <div style="border-top: 1px solid #cbd5e1; margin: 6px 0;"></div>
+                            <div style="display: table; width: 100%; margin-top: 8px;">
+                                <span style="display: table-cell; text-align: left; font-weight: 800; color: #0f172a;">NET AMOUNT PAYABLE TO SUPPLIER</span>
+                                <span style="display: table-cell; text-align: right; font-weight: 900; font-size: 18px; color: #0f172a;">₱ {{ number_format($truckLoad->net_payable, 2) }}</span>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <table class="signatures" cellpadding="0" cellspacing="0">
                 <div class="summary-left">
                     <div class="summary-box">
-                        <div class="row">
-                            <span class="label">Gross Wood Amount</span>
-                            <span class="value">₱ {{ number_format($truckLoad->gross_amount, 2) }}</span>
-                        </div>
                         <div class="row">
                             <span class="label">Driver's Assistance</span>
                             <span class="value">+ ₱ {{ number_format($truckLoad->drivers_assistance, 2) }}</span>
                         </div>
                         <div class="row">
+                            <span class="label">Expenses Deduction</span>
+                            <span class="value">- ₱ {{ number_format($truckLoad->expenses_deduction, 2) }}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Travel Paper</span>
+                            <span class="value">- ₱ {{ number_format($truckLoad->travel_paper_deduction, 2) }}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Trucking Deduction</span>
+                            <span class="value">- ₱ {{ number_format($truckLoad->trucking_deduction, 2) }}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">Cash Advance</span>
+                            <span class="value">- ₱ {{ number_format($truckLoad->cash_advance, 2) }}</span>
+                        </div>
+                        <div class="row" style="border-top:1px solid #cbd5e1; margin-top:6px; padding-top:6px;">
                             <span class="label">Total Deductions</span>
-                            <span class="value">₱ {{ number_format($truckLoad->total_deductions, 2) }}</span>
+                            <span class="value">- ₱ {{ number_format($truckLoad->total_deductions, 2) }}</span>
                         </div>
                     </div>
                 </div>

@@ -208,6 +208,19 @@
         </table>
     </div>
 
+    @php
+        $total_pieces = array_sum(array_column($breakdownBrackets, 'pieces'));
+        $total_volume = array_sum(array_column($breakdownBrackets, 'total_volume'));
+        $gross_wood_amount = $calculatedGrossAmount;
+        $driver_assistance = $truckLoad->drivers_assistance;
+        $expenses_deduction = $truckLoad->expenses_deduction;
+        $travel_paper = $truckLoad->travel_paper_deduction;
+        $trucking_deduction = $truckLoad->trucking_deduction;
+        $cash_advance = $truckLoad->cash_advance;
+        $total_deductions = $truckLoad->total_deductions;
+        $net_payable = $truckLoad->net_payable;
+    @endphp
+
     <!-- WOOD SCALING BREAKDOWN TABLE -->
     <div class="section-header">WOOD SCALING BREAKDOWN</div>
     <table class="data-table">
@@ -235,23 +248,50 @@
                 </tr>
             @endforelse
         </tbody>
+        <tfoot>
+            <tr style="font-weight: bold; background-color: #f8fafc; border-top: 2px solid #000;">
+                <td>TOTAL</td>
+                <td>{{ $total_pieces }}</td>
+                <td>{{ number_format($total_volume, 3) }}</td>
+                <td>-</td>
+                <td>₱ {{ number_format($gross_wood_amount, 2) }}</td>
+            </tr>
+        </tfoot>
     </table>
 
     <!-- TOTALS & PAYOUT SECTION -->
-    <table class="totals-table">
+    <table style="width: 100%; border: none; border-collapse: collapse; margin-top: 10px;">
         <tr>
-            <td style="width: 50%; vertical-align: top; padding-right: 15px;">
-                <div style="border: 1.5px solid #334155; border-radius: 10px; padding: 10px;">
-                    <div style="font-size: 9.5px; color: #475569; font-weight: bold; margin-bottom: 4px;">GROSS WOOD AMOUNT: <span style="float: right; color: #0f172a;">₱ {{ number_format($calculatedGrossAmount, 2) }}</span></div>
-                    <div style="font-size: 9.5px; color: #475569; font-weight: bold; margin-bottom: 4px;">DRIVER'S ASSISTANCE: <span style="float: right; color: #15803d;">+ ₱ {{ number_format($truckLoad->drivers_assistance, 2) }}</span></div>
-                    <div style="font-size: 9.5px; color: #475569; font-weight: bold;">TOTAL DEDUCTIONS: <span style="float: right; color: #0f172a;">₱ {{ number_format($calculatedDeductions, 2) }}</span></div>
-                </div>
+            <td style="width: 50%; vertical-align: top; padding-right: 8px; border: none;">
+                <table style="width:100%; border:none; border-collapse: collapse;">
+                    <tr>
+                        <td style="border:1px solid #334155; border-radius:10px; padding:10px; vertical-align: top;">
+                            <div style="font-size: 10px; font-weight: 800; margin-bottom: 8px;">DEDUCTIONS BREAKDOWN</div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">Add Driver's Assistance: <span style="float: right; color: #15803d;">+ ₱ {{ number_format($driver_assistance, 2) }}</span></div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">Expenses Deduction: <span style="float: right;">- ₱ {{ number_format($expenses_deduction, 2) }}</span></div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">Travel Paper / Permit: <span style="float: right;">- ₱ {{ number_format($travel_paper, 2) }}</span></div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">Trucking Deduction: <span style="float: right;">- ₱ {{ number_format($trucking_deduction, 2) }}</span></div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 6px;">Cash Advance: <span style="float: right;">- ₱ {{ number_format($cash_advance, 2) }}</span></div>
+                            <hr style="border:none; border-top:1px solid #cbd5e1; margin: 6px 0;" />
+                            <div style="font-size: 10px; font-weight: 800;">TOTAL DEDUCTIONS: <span style="float: right;">- ₱ {{ number_format($total_deductions, 2) }}</span></div>
+                        </td>
+                    </tr>
+                </table>
             </td>
-            <td style="width: 50%; vertical-align: top;">
-                <div class="payout-box">
-                    <div class="payout-label">NET AMOUNT PAYABLE TO SUPPLIER</div>
-                    <div class="payout-amount">₱ {{ number_format($calculatedNetPayable, 2) }}</div>
-                </div>
+            <td style="width: 50%; vertical-align: top; padding-left: 8px; border: none;">
+                <table style="width:100%; border:none; border-collapse: collapse;">
+                    <tr>
+                        <td style="border:1px solid #334155; border-radius:10px; padding:10px; vertical-align: top;">
+                            <div style="font-size: 10px; font-weight: 800; margin-bottom: 8px;">FINANCIAL SUMMARY</div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">GROSS WOOD AMOUNT: <span style="float: right; color: #0f172a;">₱ {{ number_format($gross_wood_amount, 2) }}</span></div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 4px;">ADD DRIVER'S ASSISTANCE: <span style="float: right; color: #15803d;">+ ₱ {{ number_format($driver_assistance, 2) }}</span></div>
+                            <div style="font-size: 9.5px; color: #475569; margin-bottom: 6px;">LESS TOTAL DEDUCTIONS: <span style="float: right;">- ₱ {{ number_format($total_deductions, 2) }}</span></div>
+                            <hr style="border:none; border-top:1px solid #cbd5e1; margin: 6px 0;" />
+                            <div style="margin-top: 8px; font-size: 10px; font-weight: 800; color:#0f172a;">NET AMOUNT PAYABLE TO SUPPLIER</div>
+                            <div style="margin-top: 4px; font-size: 18px; font-weight: 900; color:#0f172a;">₱ {{ number_format($net_payable, 2) }}</div>
+                        </td>
+                    </tr>
+                </table>
             </td>
         </tr>
     </table>

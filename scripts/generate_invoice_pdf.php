@@ -70,7 +70,13 @@ if (empty($breakdown)) {
 }
 
 $calculatedGrossAmount = round(array_sum(array_column($breakdown, 'subtotal')), 2);
-$calculatedDeductions = round((float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+$calculatedDeductions = round(
+    (float) $truckLoad->expenses_deduction
+    + (float) $truckLoad->travel_paper_deduction
+    + (float) $truckLoad->trucking_deduction
+    + (float) $truckLoad->cash_advance,
+    2
+);
 $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions + (float) $truckLoad->drivers_assistance, 2);
 
 echo "TruckLoad id={$truckLoad->id}\n";

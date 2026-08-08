@@ -282,6 +282,7 @@ class ScalingController extends Controller
             'expenses_deduction' => 'nullable|numeric|min:0',
             'travel_paper_deduction' => 'nullable|numeric|min:0',
             'trucking_deduction' => 'nullable|numeric|min:0',
+            'cash_advance' => 'nullable|numeric|min:0',
             'items' => 'required|array|min:1',
             'items.*.category' => 'required|string|max:120',
             'items.*.grade' => 'required|string|max:100',
@@ -314,6 +315,7 @@ class ScalingController extends Controller
             $expensesDeduction = (float) ($validated['expenses_deduction'] ?? 0);
             $travelPaper = (float) ($validated['travel_paper_deduction'] ?? 0);
             $truckingDeduction = (float) ($validated['trucking_deduction'] ?? 0);
+            $cashAdvance = (float) ($validated['cash_advance'] ?? 0);
 
             // Invoice number generation
             $currentYear = date('Y', strtotime($validated['date_scaled']));
@@ -346,6 +348,7 @@ class ScalingController extends Controller
                 'expenses_deduction' => $expensesDeduction,
                 'travel_paper_deduction' => $travelPaper,
                 'trucking_deduction' => $truckingDeduction,
+                'cash_advance' => $cashAdvance,
             ]);
 
             $totalLogs = 0;
@@ -444,7 +447,7 @@ class ScalingController extends Controller
                 }
             }
 
-            $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction;
+            $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction + $cashAdvance;
             $netPayable = $grossAmount - $totalDeductions + $driversAssistance;
 
             $truckLoad->update([
@@ -621,7 +624,13 @@ class ScalingController extends Controller
         }
 
         $calculatedGrossAmount = round(array_sum(array_column($breakdownBrackets, 'subtotal')), 2);
-        $calculatedDeductions = round((float) $truckLoad->expenses_deduction + (float) $truckLoad->travel_paper_deduction + (float) $truckLoad->trucking_deduction, 2);
+        $calculatedDeductions = round(
+            (float) $truckLoad->expenses_deduction
+            + (float) $truckLoad->travel_paper_deduction
+            + (float) $truckLoad->trucking_deduction
+            + (float) $truckLoad->cash_advance,
+            2
+        );
         $calculatedNetPayable = round($calculatedGrossAmount - $calculatedDeductions + (float) $truckLoad->drivers_assistance, 2);
 
         return [

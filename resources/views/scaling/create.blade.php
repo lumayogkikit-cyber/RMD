@@ -262,6 +262,12 @@
                         <label for="trucking_deduction" class="block text-xs font-semibold text-slate-400 mb-1">Trucking Deduction (₱)</label>
                         <input type="number" step="0.01" min="0" name="trucking_deduction" id="trucking_deduction" value="{{ old('trucking_deduction', '0.00') }}" class="deduction-input w-full bg-slate-900 border border-slate-700 text-slate-100 font-mono text-sm rounded-xl px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none">
                     </div>
+
+                    <!-- Cash Advance -->
+                    <div>
+                        <label for="cash_advance" class="block text-xs font-semibold text-slate-400 mb-1">Cash Advance (₱)</label>
+                        <input type="number" step="0.01" min="0" name="cash_advance" id="cash_advance" value="{{ old('cash_advance', '0.00') }}" class="deduction-input w-full bg-slate-900 border border-slate-700 text-slate-100 font-mono text-sm rounded-xl px-4 py-2 focus:ring-2 focus:ring-amber-500 outline-none">
+                    </div>
                 </div>
 
                 <!-- Notes / Remarks -->
@@ -848,8 +854,9 @@
         const expensesDeduction = parseFloat(document.getElementById('expenses_deduction').value) || 0;
         const travelPaper = parseFloat(document.getElementById('travel_paper_deduction').value) || 0;
         const truckingDeduction = parseFloat(document.getElementById('trucking_deduction').value) || 0;
+        const cashAdvance = parseFloat(document.getElementById('cash_advance').value) || 0;
 
-        const totalDeductions = expensesDeduction + travelPaper + truckingDeduction;
+        const totalDeductions = expensesDeduction + travelPaper + truckingDeduction + cashAdvance;
         const netPayable = grandGrossAmount - totalDeductions + driversAssistance;
 
         // Update Footers
