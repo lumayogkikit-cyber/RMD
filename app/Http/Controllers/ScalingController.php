@@ -469,7 +469,7 @@ class ScalingController extends Controller
 
             return redirect()->route('scaling.invoice.print', $truckLoad->id)
                 ->with('success', "Invoice #{$truckLoad->invoice_no} (Scale Sheet #{$truckLoad->scale_sheet_no}) generated successfully!");
-        } catch (\Throwable $e) {
+            } catch (\Throwable $e) {
             DB::rollBack();
             if ($e instanceof ValidationException) {
                 return redirect()->back()->withInput()->withErrors($e->errors());
@@ -483,43 +483,52 @@ class ScalingController extends Controller
     /**
      * Show the form for editing an existing scale sheet.
      */
-    public function edit(TruckLoad $truckLoad)
+    public function edit($id)
     {
-        $truckLoad->loadMissing(['supplier']);
+        $sheet = TruckLoad::with(['supplier', 'scaleItems'])->findOrFail($id);
 
-        return view('scaling.edit', [
-            'sheet' => $truckLoad,
-        ]);
+        $priceMatrices = Cache::remember('active_price_matrix', 3600, function () {
+            return PriceMatrix::orderBy('category')->orderBy('length')->get();
+        });
+
+        $categories = Cache::remember('active_price_categories', 3600, function () {
+            return Category::orderBy('name')->pluck('name');
+        });
+
+        return view('scaling.edit', compact('sheet', 'priceMatrices', 'categories'));
     }
 
     /**
      * Update the specified scale sheet in storage.
      */
-    public function update(Request $request, TruckLoad $truckLoad)
+    public function update(Request $request, $id)
     {
+        $sheet = TruckLoad::findOrFail($id);
         $validated = $request->validate([
             'drivers_assistance' => 'nullable|numeric|min:0',
             'expenses_deduction' => 'nullable|numeric|min:0',
             'travel_paper_deduction' => 'nullable|numeric|min:0',
             'trucking_deduction' => 'nullable|numeric|min:0',
             'cash_advance' => 'nullable|numeric|min:0',
-            'other_deduction_label' => 'nullable|string|max:150',
+            'other_deduction_label' => 'nullable|string|max:255',
             'other_deduction_amount' => 'nullable|numeric|min:0',
             'notes' => 'nullable|string',
+            'date_scaled' => 'nullable|date',
+            'date_unload' => 'nullable|date',
         ]);
 
-        $driversAssistance = (float) ($validated['drivers_assistance'] ?? 0);
-        $expensesDeduction = (float) ($validated['expenses_deduction'] ?? 0);
-        $travelPaper = (float) ($validated['travel_paper_deduction'] ?? 0);
-        $truckingDeduction = (float) ($validated['trucking_deduction'] ?? 0);
-        $cashAdvance = (float) ($validated['cash_advance'] ?? 0);
-        $otherDeductionLabel = trim($validated['other_deduction_label'] ?? '');
-        $otherDeductionAmount = (float) ($validated['other_deduction_amount'] ?? 0);
+        $driversAssistance = (float) ($request->input('drivers_assistance', $validated['drivers_assistance'] ?? 0));
+        $expensesDeduction = (float) ($request->input('expenses_deduction', $validated['expenses_deduction'] ?? 0));
+        $travelPaper = (float) ($request->input('travel_paper_deduction', $validated['travel_paper_deduction'] ?? 0));
+        $truckingDeduction = (float) ($request->input('trucking_deduction', $validated['trucking_deduction'] ?? 0));
+        $cashAdvance = (float) ($request->input('cash_advance', $validated['cash_advance'] ?? 0));
+        $otherDeductionLabel = $request->input('other_deduction_label', $validated['other_deduction_label'] ?? null);
+        $otherDeductionAmount = (float) ($request->input('other_deduction_amount', $validated['other_deduction_amount'] ?? 0));
 
         $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction + $cashAdvance + $otherDeductionAmount;
-        $netPayable = (float) $truckLoad->gross_amount - $totalDeductions + $driversAssistance;
+        $netPayable = (float) $sheet->gross_amount - $totalDeductions + $driversAssistance;
 
-        $truckLoad->update([
+        $sheet->update([
             'drivers_assistance' => $driversAssistance,
             'expenses_deduction' => $expensesDeduction,
             'travel_paper_deduction' => $travelPaper,
@@ -529,11 +538,140 @@ class ScalingController extends Controller
             'other_deduction_amount' => $otherDeductionAmount,
             'total_deductions' => round($totalDeductions, 2),
             'net_payable' => round($netPayable, 2),
-            'notes' => $validated['notes'] ?? $truckLoad->notes,
+            'notes' => $request->input('notes', $sheet->notes),
+            'date_scaled' => $request->input('date_scaled', $sheet->date_scaled),
+            'date_unload' => $request->input('date_unload', $sheet->date_unload),
         ]);
 
-        return redirect()->route('scaling.show', $truckLoad->id)
-            ->with('success', "Scale Sheet #{$truckLoad->scale_sheet_no} updated successfully.");
+        // If items[] were submitted, sync scaleItems by deleting existing and recreating
+        $submittedItems = collect($request->input('items', []))
+            ->filter(function ($item) {
+                return isset($item['quantity']) && (int) $item['quantity'] > 0;
+            })->values()->all();
+
+        if (!empty($submittedItems)) {
+            DB::beginTransaction();
+            try {
+                // remove existing items for this sheet
+                ScaleItem::where('truck_load_id', $sheet->id)->delete();
+
+                $totalLogs = 0;
+                $totalVolume = 0.0;
+                $grossAmount = 0.0;
+
+                $splitChildRows = [];
+                $splitParentMap = [];
+
+                $createScaleItem = function (array $item, ?int $parentLogId = null) use (&$sheet, &$totalLogs, &$totalVolume, &$grossAmount) {
+                    $category = strtoupper(trim($item['category'] ?? ($item['wood_category'] ?? 'UNKNOWN')));
+                    $grade = $item['grade'] ?? 'Good';
+                    $length = (float) ($item['length'] ?? 2.6);
+                    $diameter = (int) ($item['diameter'] ?? 0);
+                    $quantity = (int) ($item['quantity'] ?? 0);
+                    $isSplit = isset($item['is_split']) && $item['is_split'];
+
+                    $volPerLog = ScaleItem::calculateBreretonVolume($diameter, $length);
+                    if (isset($item['volume']) && is_numeric($item['volume']) && (float) $item['volume'] > 0) {
+                        $volPerLog = round((float) $item['volume'], 3);
+                    }
+
+                    $effectivePieceCount = ScaleItem::resolveEffectivePieceCount($quantity, $isSplit, $parentLogId !== null);
+                    $calculationQuantity = ScaleItem::resolveVolumeBasisQuantity($quantity, $isSplit, $parentLogId !== null);
+
+                    $submittedVolume = isset($item['volume']) && is_numeric($item['volume']) ? round((float) $item['volume'], 3) : null;
+                    $submittedTotalVolume = isset($item['total_volume']) && is_numeric($item['total_volume']) ? round((float) $item['total_volume'], 3) : null;
+                    $submittedSubtotal = isset($item['subtotal']) && is_numeric($item['subtotal']) ? round((float) $item['subtotal'], 2) : null;
+
+                    if ($submittedVolume !== null && $submittedVolume > 0) {
+                        $volPerLog = $submittedVolume;
+                    }
+
+                    $totVol = $submittedTotalVolume;
+                    if ($totVol === null || $totVol <= 0) {
+                        $totVol = round($volPerLog * $calculationQuantity, 3);
+                    }
+
+                    $rate = PriceMatrix::matchRate($category, $length, $diameter, $grade);
+                    $subtotal = $submittedSubtotal;
+                    if ($subtotal === null) {
+                        $subtotal = round($totVol * $rate, 2);
+                    }
+
+                    if ($totVol > 0 && $subtotal !== null && $subtotal >= 0) {
+                        $pricePerCuM = round($subtotal / $totVol, 2);
+                    } else {
+                        $pricePerCuM = $rate;
+                    }
+
+                    $scaleItem = ScaleItem::create([
+                        'truck_load_id' => $sheet->id,
+                        'parent_log_id' => $parentLogId,
+                        'wood_category' => $category,
+                        'grade' => $grade,
+                        'is_split' => $isSplit,
+                        'split_group_id' => $item['split_group_id'] ?? null,
+                        'length' => $length,
+                        'diameter' => $diameter,
+                        'quantity' => $quantity,
+                        'volume' => $volPerLog,
+                        'total_volume' => $totVol,
+                        'price_per_cu_m' => $pricePerCuM,
+                        'subtotal' => $subtotal,
+                    ]);
+
+                    $totalLogs += $effectivePieceCount;
+                    $totalVolume += $totVol;
+                    $grossAmount += $subtotal;
+
+                    return $scaleItem;
+                };
+
+                foreach ($submittedItems as $itemKey => $item) {
+                    $isSplit = isset($item['is_split']) && $item['is_split'];
+                    $splitGroup = trim((string) ($item['split_group_id'] ?? ''));
+                    $splitSide = strtoupper(trim((string) ($item['split_side'] ?? 'A')));
+
+                    if ($isSplit && $splitGroup !== '' && $splitSide === 'B') {
+                        $splitChildRows[$splitGroup][] = $item;
+                        continue;
+                    }
+
+                    $parentItem = $createScaleItem($item, null);
+
+                    if ($isSplit && $splitGroup !== '') {
+                        $splitParentMap[$splitGroup] = $parentItem->id;
+                    }
+                }
+
+                foreach ($splitChildRows as $splitGroup => $childRows) {
+                    $parentId = $splitParentMap[$splitGroup] ?? null;
+
+                    foreach ($childRows as $childItem) {
+                        $createScaleItem($childItem, $parentId);
+                    }
+                }
+
+                $totalDeductions = $expensesDeduction + $travelPaper + $truckingDeduction + $cashAdvance + $otherDeductionAmount;
+                $netPayable = $grossAmount - $totalDeductions + $driversAssistance;
+
+                $sheet->update([
+                    'total_logs' => $totalLogs,
+                    'total_volume' => round($totalVolume, 3),
+                    'gross_amount' => round($grossAmount, 2),
+                    'total_deductions' => round($totalDeductions, 2),
+                    'net_payable' => round($netPayable, 2),
+                ]);
+
+                DB::commit();
+            } catch (	hrowable $e) {
+                DB::rollBack();
+                Log::error('Scaling update failed while syncing items', ['error' => $e->getMessage(), 'truck_load_id' => $sheet->id]);
+                return redirect()->back()->withInput()->with('error', 'Error updating scale items: ' . $e->getMessage());
+            }
+        }
+
+        return redirect()->route('scaling.show', ['scaling' => $sheet->id])
+            ->with('success', "Scale Sheet #{$sheet->scale_sheet_no} updated successfully.");
     }
 
     /**
@@ -627,7 +765,7 @@ class ScalingController extends Controller
     {
         $truckLoad->loadMissing('scaleItems');
 
-        $bracketOrder = ['16-18', '20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
+        $bracketOrder = ['16-18', '20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-80'];
         $groupedBrackets = array_fill_keys($bracketOrder, [
             'bracket' => null,
             'pieces' => 0,
@@ -659,7 +797,7 @@ class ScalingController extends Controller
             } elseif ($dia <= 58) {
                 $b = '50-58';
             } else {
-                $b = '60-UP';
+                $b = '60-80';
             }
 
             $groupedBrackets[$b]['pieces'] += ScaleItem::resolveEffectivePieceCount((float) $item->quantity, (bool) $item->is_split, !is_null($item->parent_log_id));

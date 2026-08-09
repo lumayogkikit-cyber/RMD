@@ -345,8 +345,45 @@
     let categoryList = (categoriesFromServer && categoriesFromServer.length) ? categoriesFromServer : [...new Set(priceMatrix.map(item => item.category.toUpperCase()))].sort();
     const defaultCategory = categoryList.length ? categoryList[0] : 'FALCATA';
 
-    // Initial default template rows: even diameters from 16 to 60 (Length strictly 1.3m or 2.6m)
-    const initialRows = Array.from({ length: 23 }, (_, index) => {
+        // Official volume lookup table for standard diameters and lengths (m³)
+        const volumeTable = {
+            16: { '2.6': 0.052, '1.3': 0.026 },
+            18: { '2.6': 0.066, '1.3': 0.033 },
+            20: { '2.6': 0.081, '1.3': 0.040 },
+            22: { '2.6': 0.098, '1.3': 0.049 },
+            24: { '2.6': 0.117, '1.3': 0.058 },
+            26: { '2.6': 0.138, '1.3': 0.069 },
+            28: { '2.6': 0.160, '1.3': 0.080 },
+            30: { '2.6': 0.183, '1.3': 0.091 },
+            32: { '2.6': 0.209, '1.3': 0.104 },
+            34: { '2.6': 0.236, '1.3': 0.118 },
+            36: { '2.6': 0.264, '1.3': 0.132 },
+            38: { '2.6': 0.294, '1.3': 0.147 },
+            40: { '2.6': 0.326, '1.3': 0.163 },
+            42: { '2.6': 0.360, '1.3': 0.180 },
+            44: { '2.6': 0.395, '1.3': 0.197 },
+            46: { '2.6': 0.432, '1.3': 0.216 },
+            48: { '2.6': 0.470, '1.3': 0.235 },
+            50: { '2.6': 0.510, '1.3': 0.255 },
+            52: { '2.6': 0.552, '1.3': 0.276 },
+            54: { '2.6': 0.595, '1.3': 0.297 },
+            56: { '2.6': 0.640, '1.3': 0.320 },
+            58: { '2.6': 0.686, '1.3': 0.343 },
+            60: { '2.6': 0.735, '1.3': 0.367 },
+            62: { '2.6': 0.784, '1.3': 0.392 },
+            64: { '2.6': 0.836, '1.3': 0.418 },
+            66: { '2.6': 0.889, '1.3': 0.444 },
+            68: { '2.6': 0.944, '1.3': 0.472 },
+            70: { '2.6': 1.000, '1.3': 0.500 },
+            72: { '2.6': 1.058, '1.3': 0.529 },
+            74: { '2.6': 1.118, '1.3': 0.559 },
+            76: { '2.6': 1.179, '1.3': 0.589 },
+            78: { '2.6': 1.242, '1.3': 0.621 },
+            80: { '2.6': 1.306, '1.3': 0.653 }
+        };
+
+        // Initial default template rows: even diameters from 16 to 80 (Length strictly 1.3m or 2.6m)
+        const initialRows = Array.from({ length: 33 }, (_, index) => {
         const diameter = 16 + (index * 2);
         return {
             category: defaultCategory,
@@ -426,7 +463,7 @@
             tr.dataset.isSplit = 'true';
 
             const defaultGradeA = data.gradeA || 'Good';
-            const defaultLengthA = data.lengthA || '2.6';
+            const defaultLengthA = data.lengthA || '1.3';
             const defaultDiaA = data.diameterA || data.diameter || 20;
 
             const defaultGradeB = data.gradeB || 'Sawmill';
@@ -477,9 +514,8 @@
                             <option value="Good" ${defaultGradeA === 'Good' ? 'selected' : ''}>Good</option>
                             <option value="Sawmill" ${defaultGradeA === 'Sawmill' ? 'selected' : ''}>Sawmill (SM)</option>
                         </select>
-                        <select class="row-len-a bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-mono">
-                            <option value="1.3" ${String(defaultLengthA) === '1.3' ? 'selected' : ''}>1.3m</option>
-                            <option value="2.6" ${String(defaultLengthA) === '2.6' ? 'selected' : ''}>2.6m</option>
+                        <select class="row-len-a bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-mono" disabled>
+                            <option value="1.3" selected>1.3m</option>
                         </select>
                         <div class="flex items-center gap-1">
                             <input type="number" step="1" min="1" value="${defaultDiaA}" class="row-dia-a w-14 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-mono text-center">
@@ -495,9 +531,8 @@
                             <option value="Good" ${defaultGradeB === 'Good' ? 'selected' : ''}>Good</option>
                             <option value="Sawmill" ${defaultGradeB === 'Sawmill' ? 'selected' : ''}>Sawmill (SM)</option>
                         </select>
-                        <select class="row-len-b bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-mono">
-                            <option value="1.3" ${String(defaultLengthB) === '1.3' ? 'selected' : ''}>1.3m</option>
-                            <option value="2.6" ${String(defaultLengthB) === '2.6' ? 'selected' : ''}>2.6m</option>
+                        <select class="row-len-b bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-mono" disabled>
+                            <option value="1.3" selected>1.3m</option>
                         </select>
                         <div class="flex items-center gap-1">
                             <input type="number" step="1" min="1" value="${defaultDiaB}" class="row-dia-b w-14 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-mono text-center">
@@ -564,8 +599,24 @@
                 tr.querySelector('.row-qty-hidden-a').value = qty;
                 tr.querySelector('.row-qty-hidden-b').value = qty;
 
-                const volA = diaA > 0 && lenA > 0 ? (0.7854 * Math.pow(diaA, 2) * lenA) / 10000 : 0;
-                const volB = diaB > 0 && lenB > 0 ? (0.7854 * Math.pow(diaB, 2) * lenB) / 10000 : 0;
+                let volA = 0;
+                let volB = 0;
+                if (diaA > 0 && lenA > 0) {
+                    const keyA = String(lenA);
+                    if (volumeTable[diaA] && volumeTable[diaA][keyA] !== undefined) {
+                        volA = Number(volumeTable[diaA][keyA]);
+                    } else {
+                        volA = (0.7854 * Math.pow(diaA, 2) * lenA) / 10000;
+                    }
+                }
+                if (diaB > 0 && lenB > 0) {
+                    const keyB = String(lenB);
+                    if (volumeTable[diaB] && volumeTable[diaB][keyB] !== undefined) {
+                        volB = Number(volumeTable[diaB][keyB]);
+                    } else {
+                        volB = (0.7854 * Math.pow(diaB, 2) * lenB) / 10000;
+                    }
+                }
                 const totVolA = qty * volA;
                 const totVolB = qty * volB;
                 const rateA = getMatchingRate(cat, lenA, diaA, gradeA);
@@ -763,7 +814,12 @@
 
             let volPerLog = 0;
             if (dia > 0 && len > 0) {
-                volPerLog = (0.7854 * Math.pow(dia, 2) * len) / 10000;
+                const key = String(len);
+                if (volumeTable[dia] && volumeTable[dia][key] !== undefined) {
+                    volPerLog = Number(volumeTable[dia][key]);
+                } else {
+                    volPerLog = (0.7854 * Math.pow(dia, 2) * len) / 10000;
+                }
             }
             const totVol = qty * volPerLog;
             const rate = getMatchingRate(cat, len, dia, grade);
@@ -800,14 +856,16 @@
 
             const qty = parseInt(r.querySelector('.row-qty-input').value) || 0;
 
-            // Volumes per part based on their distinct diameter & length
+            // Volumes per part based on their distinct diameter & length using lookup
             let volA = 0;
             if (diaA > 0 && lenA > 0) {
-                volA = (0.7854 * Math.pow(diaA, 2) * lenA) / 10000;
+                const keyA = String(lenA);
+                volA = (volumeTable[diaA] && volumeTable[diaA][keyA] !== undefined) ? Number(volumeTable[diaA][keyA]) : (0.7854 * Math.pow(diaA, 2) * lenA) / 10000;
             }
             let volB = 0;
             if (diaB > 0 && lenB > 0) {
-                volB = (0.7854 * Math.pow(diaB, 2) * lenB) / 10000;
+                const keyB = String(lenB);
+                volB = (volumeTable[diaB] && volumeTable[diaB][keyB] !== undefined) ? Number(volumeTable[diaB][keyB]) : (0.7854 * Math.pow(diaB, 2) * lenB) / 10000;
             }
             const combinedVolSingle = volA + volB;
             const totVol = qty * combinedVolSingle;
@@ -904,7 +962,7 @@
         initialRows.forEach(row => addRow({
             category: row.category,
             gradeA: 'Good',
-            lengthA: '2.6',
+            lengthA: '1.3',
             diameterA: row.diameter,
             gradeB: 'Sawmill',
             lengthB: '1.3',
@@ -927,7 +985,7 @@
         document.getElementById('addSplitRowBtn').addEventListener('click', () => addRow({
             category: defaultCategory,
             gradeA: 'Good',
-            lengthA: '2.6',
+            lengthA: '1.3',
             diameterA: 24,
             gradeB: 'Sawmill',
             lengthB: '1.3',

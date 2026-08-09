@@ -179,7 +179,6 @@
             </div>
         </div>
     </footer>
-</footer>
 
     @stack('scripts')
 

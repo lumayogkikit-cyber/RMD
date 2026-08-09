@@ -30,7 +30,7 @@ if ($itemsCollection->isEmpty()) {
     $itemsCollection = collect(DB::table('scale_items')->where('truck_load_id', $truckLoad->id)->get());
 }
 
-$bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
+$bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-80'];
 $brackets = $itemsCollection->map(function ($item) {
     $grade = $item->grade ?? 'Good';
     $dia = (int) ($item->diameter ?? 0);
@@ -48,7 +48,7 @@ $brackets = $itemsCollection->map(function ($item) {
     } elseif ($dia <= 58) {
         $bracket = '50-58';
     } else {
-        $bracket = '60-UP';
+        $bracket = '60-80';
     }
 
     return [

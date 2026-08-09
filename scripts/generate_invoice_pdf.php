@@ -23,7 +23,7 @@ if (! $truckLoad) {
 
 $items = ScaleItem::where('truck_load_id', $truckLoad->id)->get();
 
-$bracketOrder = ['16-18', '20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
+$bracketOrder = ['16-18', '20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-80'];
 $grouped = [];
 foreach ($bracketOrder as $b) {
     $grouped[$b] = ['bracket' => $b, 'pieces' => 0, 'total_volume' => 0.0, 'rate' => 0.0, 'subtotal' => 0.0];
@@ -47,7 +47,7 @@ foreach ($items as $item) {
     } elseif ($dia <= 58) {
         $b = '50-58';
     } else {
-        $b = '60-UP';
+        $b = '60-80';
     }
 
     $grouped[$b]['pieces'] += (int) $item->quantity;

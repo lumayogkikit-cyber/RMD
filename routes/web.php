@@ -45,7 +45,7 @@ Route::get('/debug/scale-breakdown/{truckLoad}', function (Request $request, $tr
 
     $items = \App\Models\ScaleItem::where('truck_load_id', $tl->id)->get();
 
-    $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-UP'];
+    $bracketOrder = ['20-24', 'Sawmill (SM)', '26-28', '30-38', '40-48', '50-58', '60-80'];
     $groupedBrackets = [];
     foreach ($bracketOrder as $b) {
         $groupedBrackets[$b] = ['bracket' => $b, 'pieces' => 0, 'total_volume' => 0.0, 'rate' => 0.0, 'subtotal' => 0.0];
@@ -67,7 +67,7 @@ Route::get('/debug/scale-breakdown/{truckLoad}', function (Request $request, $tr
         } elseif ($dia <= 58) {
             $b = '50-58';
         } else {
-            $b = '60-UP';
+            $b = '60-80';
         }
 
         $groupedBrackets[$b]['pieces'] += (int) $item->quantity;
