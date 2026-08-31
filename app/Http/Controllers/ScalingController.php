@@ -7,6 +7,7 @@ use App\Models\PriceMatrix;
 use App\Models\Category;
 use App\Models\TruckLoad;
 use App\Models\ScaleItem;
+use App\Services\PricingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -229,13 +230,12 @@ class ScalingController extends Controller
     {
         $suppliers = Supplier::orderBy('name')->get();
         $existingSuppliers = Supplier::orderBy('name')->pluck('name');
-        $priceMatrices = Cache::remember('active_price_matrix', 3600, function () {
-            return PriceMatrix::orderBy('category')->orderBy('length')->get();
-        });
+        
+        // STRICT: Always fetch fresh price matrix from DB (no caching for scalers)
+        $priceMatrices = PricingService::getFreshPriceMatrix();
 
-        $categories = Cache::remember('active_price_categories', 3600, function () {
-            return Category::orderBy('name')->pluck('name');
-        });
+        // Get fresh categories from price matrix
+        $categories = PricingService::getAllCategories();
 
         // Auto-generate next Scale Sheet Number
         $lastRecord = TruckLoad::whereNotNull('scale_sheet_no')
@@ -482,18 +482,15 @@ class ScalingController extends Controller
 
     /**
      * Show the form for editing an existing scale sheet.
+     * STRICT: Fetches fresh price matrix from DB (no caching for scalers)
      */
     public function edit($id)
     {
         $sheet = TruckLoad::with(['supplier', 'scaleItems'])->findOrFail($id);
 
-        $priceMatrices = Cache::remember('active_price_matrix', 3600, function () {
-            return PriceMatrix::orderBy('category')->orderBy('length')->get();
-        });
-
-        $categories = Cache::remember('active_price_categories', 3600, function () {
-            return Category::orderBy('name')->pluck('name');
-        });
+        // STRICT: Always fetch fresh prices from DB for scaler edits
+        $priceMatrices = PricingService::getFreshPriceMatrix();
+        $categories = PricingService::getAllCategories();
 
         return view('scaling.edit', compact('sheet', 'priceMatrices', 'categories'));
     }

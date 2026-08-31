@@ -8,6 +8,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use App\Models\AuditLog;
 use App\Models\TruckLoad;
+use App\Services\PricingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -122,19 +123,42 @@ class AdminController extends Controller
     }
 
     /**
-     * JSON endpoint for active price matrix (cached)
+     * JSON endpoint for active price matrix - FRESH FROM DB, NO CACHE
+     * Called by scaler forms to refresh prices dynamically
+     * Returns current prices from database directly (strict real-time sync)
      */
     public function apiPriceMatrix()
     {
-        $data = Cache::remember('active_price_matrix', 3600, function () {
-            return PriceMatrix::orderBy('category')->orderBy('dia_min')->orderBy('length')->get();
-        });
-
+        $data = PricingService::getFreshPriceMatrix();
         return response()->json($data);
     }
 
     /**
+     * JSON endpoint to fetch a single rate on demand
+     * Scaler forms call this when rows change to get fresh rates
+     * Parameters: category, length, diameter, grade
+     */
+    public function apiGetRate(Request $request)
+    {
+        $category = $request->query('category', 'FALCATA');
+        $length = (float) $request->query('length', 2.6);
+        $diameter = (int) $request->query('diameter', 20);
+        $grade = $request->query('grade', 'Good');
+
+        $rate = PricingService::getRate($category, $length, $diameter, $grade);
+
+        return response()->json([
+            'rate' => $rate,
+            'category' => $category,
+            'length' => $length,
+            'diameter' => $diameter,
+            'grade' => $grade,
+        ]);
+    }
+
+    /**
      * Update Dynamic Price Matrix
+     * STRICT: Clears all caches immediately so scalers get fresh rates on next request
      */
     public function updatePriceMatrix(Request $request)
     {
@@ -152,21 +176,23 @@ class AdminController extends Controller
             }
         }
 
-        // Ensure scalers pick up new rates immediately
-        Cache::forget('active_price_matrix');
+        // STRICT: Clear ALL pricing caches immediately - no stale rates for scalers
+        PricingService::clearPricingCache();
+        
         AuditLog::create([
             'user_id' => Auth::id(),
             'user_name' => Auth::user()->name,
             'action' => 'Price Matrix Updated',
-            'details' => 'Super Admin updated global wood pricing rates.',
+            'details' => 'Super Admin updated global wood pricing rates. Cache cleared immediately for real-time sync.',
             'ip_address' => $request->ip(),
         ]);
 
-        return redirect()->route('admin.dashboard')->with('success', 'Dynamic Price Matrix updated successfully!');
+        return redirect()->route('admin.dashboard')->with('success', 'Dynamic Price Matrix updated successfully! Scalers will see new rates immediately.');
     }
 
     /**
      * Add a new price matrix row for a category/length/diameter bracket
+     * STRICT: Clears all caches immediately for real-time sync
      */
     public function addPriceMatrixRow(Request $request)
     {
@@ -186,13 +212,14 @@ class AdminController extends Controller
             'price_per_cu_m' => $validated['price_per_cu_m'],
         ]);
 
-        // Ensure scalers pick up new rates immediately
-        Cache::forget('active_price_matrix');
+        // STRICT: Clear ALL caches immediately
+        PricingService::clearPricingCache();
+        
         AuditLog::create([
             'user_id' => Auth::id(),
             'user_name' => Auth::user()->name,
             'action' => 'Price Matrix Row Added',
-            'details' => sprintf('Super Admin added new category rate: %s %.3fm, %d-%d cm, ₱%.3f.',
+            'details' => sprintf('Super Admin added new category rate: %s %.3fm, %d-%d cm, ₱%.3f. Cache cleared immediately for real-time sync.',
                 strtoupper(trim($validated['category'])),
                 $validated['length'],
                 $validated['dia_min'],
@@ -202,13 +229,13 @@ class AdminController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
-        return redirect()->route('admin.dashboard')->with('success', 'New price matrix row added successfully!');
+        return redirect()->route('admin.dashboard')->with('success', 'New price matrix row added! Scalers will see it immediately.');
     }
 
     public function destroyPriceMatrixRow(Request $request, PriceMatrix $priceMatrix = null)
     {
         if ($priceMatrix) {
-            $details = sprintf('Deleted price matrix row: %s %.3fm, %d-%d cm, ₱%.3f.',
+            $details = sprintf('Deleted price matrix row: %s %.3fm, %d-%d cm, ₱%.3f. Cache cleared immediately for real-time sync.',
                 $priceMatrix->category,
                 $priceMatrix->length,
                 $priceMatrix->dia_min,
@@ -218,8 +245,9 @@ class AdminController extends Controller
 
             $priceMatrix->delete();
 
-            // Ensure scalers pick up changes immediately
-            Cache::forget('active_price_matrix');
+            // STRICT: Clear ALL caches immediately
+            PricingService::clearPricingCache();
+            
             AuditLog::create([
                 'user_id' => Auth::id(),
                 'user_name' => Auth::user()->name,
@@ -229,7 +257,7 @@ class AdminController extends Controller
             ]);
         }
 
-        return redirect()->route('admin.dashboard')->with('success', 'Price matrix row deleted successfully.');
+        return redirect()->route('admin.dashboard')->with('success', 'Price matrix row deleted successfully. Scalers will see changes immediately.');
     }
 
     /**

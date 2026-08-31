@@ -118,6 +118,8 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('scaling', ScalingController::class);
     // Live price matrix JSON for scaler form (authenticated users)
     Route::get('/api/price-matrix', [AdminController::class, 'apiPriceMatrix'])->name('api.price-matrix');
+    // Get single rate on demand
+    Route::get('/api/get-rate', [AdminController::class, 'apiGetRate'])->name('api.get-rate');
 });
 
 // Super Admin MASTER Override Routes (Super Admin Only)

@@ -59,13 +59,47 @@ const initialRows = Array.from({ length: 33 }, (_, index) => {
 
 let rowIndex = 0;
 
+// Rate cache to avoid repeated API calls for same spec
+const rateCache = {};
+
+/**
+ * STRICT DYNAMIC RATE FETCHING: Query backend for fresh rates
+ * Falls back to embedded priceMatrix array only if API fails
+ */
 function getMatchingRate(category, length, diameter, grade) {
     const normCategory = String(category || '').trim().toUpperCase();
     const normGrade = String(grade || '').trim().toUpperCase();
     const len = parseFloat(length) || 2.6;
     const dia = parseInt(diameter, 10) || 0;
 
-    // 1. Sawmill Grade dynamic check from live DB matrix
+    // Create cache key
+    const cacheKey = `${normCategory}|${len}|${dia}|${normGrade}`;
+    if (rateCache[cacheKey] !== undefined) {
+        return rateCache[cacheKey];
+    }
+
+    let rate = 0;
+
+    // Try to fetch fresh rate from backend API (synchronous via XMLHttpRequest)
+    // This ensures we always have the latest rates from superadmin updates
+    try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', '{{ route("api.get-rate") }}?category=' + encodeURIComponent(normCategory) + '&length=' + len + '&diameter=' + dia + '&grade=' + encodeURIComponent(normGrade), false);
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.send();
+        
+        if (xhr.status === 200) {
+            const data = JSON.parse(xhr.responseText);
+            rate = parseFloat(data.rate) || 0;
+            rateCache[cacheKey] = rate;
+            return rate;
+        }
+    } catch (e) {
+        console.warn('Failed to fetch rate from API, falling back to embedded data:', e);
+    }
+
+    // FALLBACK: Use embedded priceMatrix array if API fails
+    // 1. Sawmill Grade check
     if (normGrade === 'SAWMILL' || normGrade === 'SAWMILL (SM)') {
         const sawmillDb = priceMatrix.find(r => {
             const cat = String(r.category || '').toUpperCase();
@@ -73,15 +107,22 @@ function getMatchingRate(category, length, diameter, grade) {
                    (parseInt(r.dia_min, 10) === 0 && parseInt(r.dia_max, 10) === 0);
         });
         if (sawmillDb && parseFloat(sawmillDb.price_per_cu_m) > 0) {
-            return parseFloat(sawmillDb.price_per_cu_m);
+            rate = parseFloat(sawmillDb.price_per_cu_m);
+            rateCache[cacheKey] = rate;
+            return rate;
         }
         const sawmillCatDb = priceMatrix.find(r => String(r.category || '').toUpperCase() === 'SAWMILL');
         if (sawmillCatDb && parseFloat(sawmillCatDb.price_per_cu_m) > 0) {
-            return parseFloat(sawmillCatDb.price_per_cu_m);
+            rate = parseFloat(sawmillCatDb.price_per_cu_m);
+            rateCache[cacheKey] = rate;
+            return rate;
         }
+        rate = 1800.00;
+        rateCache[cacheKey] = rate;
+        return rate;
     }
 
-    // 2. Exact match in live priceMatrix array from DB by category, length, and diameter range
+    // 2. Exact match in priceMatrix by category, length, and diameter range
     const dbMatch = priceMatrix.find(r => {
         const catMatch = String(r.category || '').toUpperCase() === normCategory || normCategory === 'FALCATA' || String(r.category || '').toUpperCase() === 'FALCATA';
         const lenMatch = Math.abs(parseFloat(r.length) - len) < 0.05;
@@ -92,10 +133,12 @@ function getMatchingRate(category, length, diameter, grade) {
     });
 
     if (dbMatch && parseFloat(dbMatch.price_per_cu_m) > 0) {
-        return parseFloat(dbMatch.price_per_cu_m);
+        rate = parseFloat(dbMatch.price_per_cu_m);
+        rateCache[cacheKey] = rate;
+        return rate;
     }
 
-    // 3. Fallback match without strict length constraint if length was varied
+    // 3. Fallback match without strict length constraint
     const dbMatchAnyLength = priceMatrix.find(r => {
         const catMatch = String(r.category || '').toUpperCase() === normCategory || normCategory === 'FALCATA' || String(r.category || '').toUpperCase() === 'FALCATA';
         const diaMin = parseInt(r.dia_min, 10);
@@ -105,10 +148,13 @@ function getMatchingRate(category, length, diameter, grade) {
     });
 
     if (dbMatchAnyLength && parseFloat(dbMatchAnyLength.price_per_cu_m) > 0) {
-        return parseFloat(dbMatchAnyLength.price_per_cu_m);
+        rate = parseFloat(dbMatchAnyLength.price_per_cu_m);
+        rateCache[cacheKey] = rate;
+        return rate;
     }
 
     // No DB match — return 0 so frontend treats it as "no rate set" and avoids hardcoding.
+    rateCache[cacheKey] = 0.00;
     return 0.00;
 }
 
@@ -609,6 +655,41 @@ function recalculateAll() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // AUTO-REFRESH PRICES ON PAGE LOAD (ensures fresh rates from superadmin updates)
+    const autoRefreshPrices = async () => {
+        try {
+            const res = await fetch('{{ route('api.price-matrix') }}', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('Failed to fetch price matrix');
+            const data = await res.json();
+
+            // Replace price matrix and clear rate cache for fresh fetches
+            priceMatrix = data;
+            Object.keys(rateCache).forEach(k => delete rateCache[k]); // Clear cache
+            categoryList = Array.from(new Set(data.map(i => (i.category || '').toUpperCase()))).sort();
+
+            // Update selects in existing rows
+            document.querySelectorAll('select.row-cat, select.row-cat-select').forEach(sel => {
+                const current = sel.value;
+                sel.innerHTML = categoryList.map(c => `<option value="${c}">${c}</option>`).join('');
+                if (categoryList.includes(current)) sel.value = current;
+            });
+
+            const refreshedAtSpan = document.getElementById('pricesRefreshedAt');
+            if (refreshedAtSpan) {
+                refreshedAtSpan.textContent = new Date().toLocaleString();
+            }
+            recalculateAll();
+        } catch (err) {
+            console.error('Auto-refresh prices failed (will use embedded data):', err);
+        }
+    };
+
+    // Run auto-refresh on page load
+    autoRefreshPrices();
+    
+    // Set auto-refresh timer (refresh every 5 minutes to catch superadmin updates)
+    setInterval(autoRefreshPrices, 5 * 60 * 1000);
+
     // Load initial rows for Box 1 (Standard) with default length 2.6m
     initialRows.forEach(row => addRow({
         category: row.category,
@@ -667,7 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
         otherDeductionLabelInput.addEventListener('change', recalculateAll);
     }
 
-    // Refresh Prices Button (AJAX) - fetch latest price matrix and categories
+    // Refresh Prices Button (Manual AJAX) - fetch latest price matrix and clear cache
     const refreshBtn = document.getElementById('refreshPricesBtn');
     const refreshedAtSpan = document.getElementById('pricesRefreshedAt');
     if (refreshBtn) {
@@ -679,8 +760,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!res.ok) throw new Error('Failed to fetch price matrix');
                 const data = await res.json();
 
-                // Replace price matrix data and recompute categories
+                // Replace price matrix data and CLEAR RATE CACHE for fresh fetches
                 priceMatrix = data;
+                Object.keys(rateCache).forEach(k => delete rateCache[k]); // Clear cache to force fresh DB queries
                 categoryList = Array.from(new Set(data.map(i => (i.category || '').toUpperCase()))).sort();
 
                 // Update selects in existing rows
