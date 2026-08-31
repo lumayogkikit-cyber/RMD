@@ -146,6 +146,15 @@ class AdminController extends Controller
         $grade = $request->query('grade', 'Good');
 
         $rate = PricingService::getRate($category, $length, $diameter, $grade);
+        
+        // Log the lookup for debugging duplicate price issues
+        \Illuminate\Support\Facades\Log::debug('API Rate Lookup', [
+            'category' => $category,
+            'length' => $length,
+            'diameter' => $diameter,
+            'grade' => $grade,
+            'rate_returned' => $rate
+        ]);
 
         return response()->json([
             'rate' => $rate,

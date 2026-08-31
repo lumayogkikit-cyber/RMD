@@ -1,5 +1,36 @@
+{{-- 
+  Unified Pricing Matrix Display Component
+  
+  Props:
+  - $mode: 'admin' (read-only, show edit UI) | 'scaler' (interactive form submission)
+  - $priceMatrices: array of price matrix data from DB
+  - $categories: array of category names
+  - $existingRows: array of existing scale items (for edit mode)
+  - $title: optional title (default varies by mode)
+  
+  Usage:
+  @component('components.pricing-matrix-display', [
+    'mode' => 'scaler',
+    'priceMatrices' => $priceMatrices,
+    'categories' => $categories,
+    'existingRows' => $existingScaleItems ?? []
+  ])
+  @endcomponent
+--}}
+
+@props([
+    'mode' => 'scaler',
+    'priceMatrices' => [],
+    'categories' => [],
+    'existingRows' => [],
+    'title' => null
+])
+
 <script>
-// Copied interactive matrix JS from create.blade.php to reuse in edit view.
+// ============================================================================
+// PRICING MATRIX JAVASCRIPT - Unified for Admin & Scaler Views
+// ============================================================================
+
 // Embedded Price Matrix Data from DB
 let priceMatrix = @json($priceMatrices);
 const categoriesFromServer = @json($categories ?? []);
@@ -43,22 +74,6 @@ const volumeTable = {
     80: { '2.6': 1.306, '1.3': 0.653, '1.0': 0.502 }
 };
 
-// Initial default template rows: even diameters from 16 to 80 (Length strictly 1.3m or 2.6m)
-const initialRows = Array.from({ length: 33 }, (_, index) => {
-    const diameter = 16 + (index * 2);
-    return {
-        category: defaultCategory,
-        grade: 'Good',
-        is_split: false,
-        split_group_id: '',
-        length: '2.6',
-        diameter,
-        quantity: 0,
-    };
-});
-
-let rowIndex = 0;
-
 // Rate cache to avoid repeated API calls for same spec
 const rateCache = {};
 
@@ -81,11 +96,9 @@ function getMatchingRate(category, length, diameter, grade) {
     let rate = 0;
 
     // Try to fetch fresh rate from backend API (synchronous via XMLHttpRequest)
-    // This ensures we always have the latest rates from superadmin updates
     try {
         const xhr = new XMLHttpRequest();
-        const apiUrl = '{{ route("api.get-rate") }}?category=' + encodeURIComponent(normCategory) + '&length=' + len + '&diameter=' + dia + '&grade=' + encodeURIComponent(normGrade);
-        xhr.open('GET', apiUrl, false);
+        xhr.open('GET', '{{ route("api.get-rate") }}?category=' + encodeURIComponent(normCategory) + '&length=' + len + '&diameter=' + dia + '&grade=' + encodeURIComponent(normGrade), false);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.send();
         
@@ -93,15 +106,10 @@ function getMatchingRate(category, length, diameter, grade) {
             const data = JSON.parse(xhr.responseText);
             rate = parseFloat(data.rate) || 0;
             rateCache[cacheKey] = rate;
-            if (rate > 0) {
-                console.debug(`API rate fetched: ${normCategory} ${dia}cm ${len}m ${normGrade} = ₱${rate}`);
-            }
             return rate;
-        } else {
-            console.warn(`API returned status ${xhr.status} for rate lookup: ${normCategory} ${dia}cm ${len}m ${normGrade}`);
         }
     } catch (e) {
-        console.warn('API rate lookup failed, falling back to embedded data:', e.message);
+        console.warn('Failed to fetch rate from API, falling back to embedded data:', e);
     }
 
     // FALLBACK: Use embedded priceMatrix array if API fails
@@ -117,16 +125,6 @@ function getMatchingRate(category, length, diameter, grade) {
             rateCache[cacheKey] = rate;
             return rate;
         }
-        const sawmillCatDb = priceMatrix.find(r => String(r.category || '').toUpperCase() === 'SAWMILL');
-        if (sawmillCatDb && parseFloat(sawmillCatDb.price_per_cu_m) > 0) {
-            rate = parseFloat(sawmillCatDb.price_per_cu_m);
-            rateCache[cacheKey] = rate;
-            return rate;
-        }
-        // NO HARDCODED FALLBACK - return 0 to indicate missing price
-        console.warn(`No sawmill price found for: ${normCategory} ${dia}cm ${len}m`);
-        rateCache[cacheKey] = 0.00;
-        return 0.00;
     }
 
     // 2. Exact match in priceMatrix by category, length, and diameter range
@@ -160,11 +158,38 @@ function getMatchingRate(category, length, diameter, grade) {
         return rate;
     }
 
-    // No DB match — return 0 so frontend treats it as "no rate set" and avoids hardcoding.
+    // No DB match — return 0
     rateCache[cacheKey] = 0.00;
     return 0.00;
 }
 
+// Clear rate cache for fresh lookups
+function clearRateCache() {
+    for (let key in rateCache) {
+        delete rateCache[key];
+    }
+}
+
+// Initialize row counter
+let rowIndex = 0;
+
+// Initial template rows for default UI population
+const initialRows = Array.from({ length: 33 }, (_, index) => {
+    const diameter = 16 + (index * 2);
+    return {
+        category: defaultCategory,
+        grade: 'Good',
+        is_split: false,
+        split_group_id: '',
+        length: '2.6',
+        diameter,
+        quantity: 0,
+    };
+});
+
+/**
+ * ADD ROW: Dynamically create table rows for standard or split logs
+ */
 function addRow(data = { category: defaultCategory, grade: 'Good', is_split: false, split_group_id: '', length: '2.6', diameter: 20, quantity: 1, isPreset: false }) {
     rowIndex++;
     const isSplit = data.is_split || false;
@@ -287,52 +312,35 @@ function addRow(data = { category: defaultCategory, grade: 'Good', is_split: fal
 
         const syncInputs = () => {
             const cat = tr.querySelector('.row-cat-select').value;
-
             const gradeA = tr.querySelector('.row-grade-a').value;
             const lenA = tr.querySelector('.row-len-a').value;
             const diaA = parseInt(tr.querySelector('.row-dia-a').value) || 20;
-
             const gradeB = tr.querySelector('.row-grade-b').value;
             const lenB = tr.querySelector('.row-len-b').value;
             const diaB = parseInt(tr.querySelector('.row-dia-b').value) || 20;
-
             const qty = parseInt(tr.querySelector('.row-qty-input').value) || 0;
 
             tr.querySelector('.row-cat-hidden-a').value = cat;
             tr.querySelector('.row-cat-hidden-b').value = cat;
-
             tr.querySelector('.row-grade-hidden-a').value = gradeA;
             tr.querySelector('.row-grade-hidden-b').value = gradeB;
-
             tr.querySelector('.row-len-hidden-a').value = lenA;
             tr.querySelector('.row-len-hidden-b').value = lenB;
-
             tr.querySelector('.row-dia-hidden-a').value = diaA;
             tr.querySelector('.row-dia-hidden-b').value = diaB;
-
             tr.querySelector('.row-qty-hidden-a').value = qty;
             tr.querySelector('.row-qty-hidden-b').value = qty;
 
-            let volA = 0;
-            let volB = 0;
+            let volA = 0, volB = 0;
             if (diaA > 0 && lenA > 0) {
                 const keyA = String(lenA);
-                if (volumeTable[diaA] && volumeTable[diaA][keyA] !== undefined) {
-                    volA = Number(volumeTable[diaA][keyA]);
-                } else {
-                    volA = (0.7854 * Math.pow(diaA, 2) * lenA) / 10000;
-                }
+                volA = (volumeTable[diaA] && volumeTable[diaA][keyA] !== undefined) ? Number(volumeTable[diaA][keyA]) : (0.7854 * Math.pow(diaA, 2) * lenA) / 10000;
             }
             if (diaB > 0 && lenB > 0) {
                 const keyB = String(lenB);
-                if (volumeTable[diaB] && volumeTable[diaB][keyB] !== undefined) {
-                    volB = Number(volumeTable[diaB][keyB]);
-                } else {
-                    volB = (0.7854 * Math.pow(diaB, 2) * lenB) / 10000;
-                }
+                volB = (volumeTable[diaB] && volumeTable[diaB][keyB] !== undefined) ? Number(volumeTable[diaB][keyB]) : (0.7854 * Math.pow(diaB, 2) * lenB) / 10000;
             }
-            const totVolA = qty * volA;
-            const totVolB = qty * volB;
+            const totVolA = qty * volA, totVolB = qty * volB;
             const rateA = getMatchingRate(cat, lenA, diaA, gradeA);
             const rateB = getMatchingRate(cat, lenB, diaB, gradeB);
 
@@ -366,36 +374,26 @@ function addRow(data = { category: defaultCategory, grade: 'Good', is_split: fal
         tr.querySelector('.row-grade-a').addEventListener('change', () => { syncInputs(); recalculateAll(); });
         tr.querySelector('.row-len-a').addEventListener('change', () => { syncInputs(); recalculateAll(); });
         tr.querySelector('.row-dia-a').addEventListener('input', () => { syncInputs(); recalculateAll(); });
-
         tr.querySelector('.row-grade-b').addEventListener('change', () => { syncInputs(); recalculateAll(); });
         tr.querySelector('.row-len-b').addEventListener('change', () => { syncInputs(); recalculateAll(); });
         tr.querySelector('.row-dia-b').addEventListener('input', () => { syncInputs(); recalculateAll(); });
-
         tr.querySelector('.row-qty-input').addEventListener('input', () => { syncInputs(); recalculateAll(); });
-
         tr.querySelector('.qty-decrement').addEventListener('click', () => {
             const qtyInput = tr.querySelector('.row-qty-input');
-            const nextValue = Math.max(0, parseInt(qtyInput.value || '0', 10) - 1);
-            qtyInput.value = nextValue;
-            syncInputs();
-            recalculateAll();
+            qtyInput.value = Math.max(0, parseInt(qtyInput.value || '0', 10) - 1);
+            syncInputs(); recalculateAll();
         });
-
         tr.querySelector('.qty-increment').addEventListener('click', () => {
             const qtyInput = tr.querySelector('.row-qty-input');
-            const nextValue = parseInt(qtyInput.value || '0', 10) + 1;
-            qtyInput.value = nextValue;
-            syncInputs();
-            recalculateAll();
+            qtyInput.value = parseInt(qtyInput.value || '0', 10) + 1;
+            syncInputs(); recalculateAll();
         });
-
     } else {
-        // Render Standard Row (Box 1, length options strictly 1.3m and 2.6m)
+        // Render Standard Row (Box 1)
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-800/30 transition-all row-item row-standard';
         tr.id = `row-${rowIndex}`;
         tr.dataset.isSplit = 'false';
-
         const defaultLen = data.length || '2.6';
 
         tr.innerHTML = `
@@ -457,25 +455,20 @@ function addRow(data = { category: defaultCategory, grade: 'Good', is_split: fal
         });
 
         tr.querySelector('.row-grade').addEventListener('change', (e) => {
-            const select = e.target;
-            if (select.value === 'Sawmill') {
-                select.className = 'row-grade w-full bg-slate-900 border border-amber-500/50 text-amber-400 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-bold';
-            } else {
-                select.className = 'row-grade w-full bg-slate-900 border border-slate-700 text-emerald-400 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-semibold';
-            }
+            e.target.className = e.target.value === 'Sawmill' 
+                ? 'row-grade w-full bg-slate-900 border border-amber-500/50 text-amber-400 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-bold'
+                : 'row-grade w-full bg-slate-900 border border-slate-700 text-emerald-400 text-xs rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-amber-500 outline-none font-semibold';
         });
 
         tr.querySelector('.qty-decrement').addEventListener('click', () => {
             const qtyInput = tr.querySelector('.row-qty');
-            const nextValue = Math.max(0, parseInt(qtyInput.value || '0', 10) - 1);
-            qtyInput.value = nextValue;
+            qtyInput.value = Math.max(0, parseInt(qtyInput.value || '0', 10) - 1);
             recalculateAll();
         });
 
         tr.querySelector('.qty-increment').addEventListener('click', () => {
             const qtyInput = tr.querySelector('.row-qty');
-            const nextValue = parseInt(qtyInput.value || '0', 10) + 1;
-            qtyInput.value = nextValue;
+            qtyInput.value = parseInt(qtyInput.value || '0', 10) + 1;
             recalculateAll();
         });
     }
@@ -511,13 +504,8 @@ function recalculateAll() {
     const standardRows = document.querySelectorAll('#standardMatrixBody tr.row-item');
     const splitRows = document.querySelectorAll('#splitMatrixBody tr.row-item');
 
-    let standardTotalLogs = 0;
-    let standardTotalVolume = 0.0;
-    let standardGrossAmount = 0.0;
-
-    let splitTotalLogs = 0;
-    let splitTotalVolume = 0.0;
-    let splitGrossAmount = 0.0;
+    let standardTotalLogs = 0, standardTotalVolume = 0.0, standardGrossAmount = 0.0;
+    let splitTotalLogs = 0, splitTotalVolume = 0.0, splitGrossAmount = 0.0;
 
     // Process Standard Rows
     standardRows.forEach(r => {
@@ -530,11 +518,7 @@ function recalculateAll() {
         let volPerLog = 0;
         if (dia > 0 && len > 0) {
             const key = String(len);
-            if (volumeTable[dia] && volumeTable[dia][key] !== undefined) {
-                volPerLog = Number(volumeTable[dia][key]);
-            } else {
-                volPerLog = (0.7854 * Math.pow(dia, 2) * len) / 10000;
-            }
+            volPerLog = (volumeTable[dia] && volumeTable[dia][key] !== undefined) ? Number(volumeTable[dia][key]) : (0.7854 * Math.pow(dia, 2) * len) / 10000;
         }
         const totVol = qty * volPerLog;
         const rate = getMatchingRate(cat, len, dia, grade);
@@ -557,21 +541,17 @@ function recalculateAll() {
         standardGrossAmount += subtotal;
     });
 
-    // Process Split Rows (Dual Independent Diameters for Part A & Part B)
+    // Process Split Rows
     splitRows.forEach(r => {
         const cat = r.querySelector('.row-cat-select').value;
-
         const gradeA = r.querySelector('.row-grade-a').value;
         const lenA = parseFloat(r.querySelector('.row-len-a').value) || 0;
         const diaA = parseInt(r.querySelector('.row-dia-a').value) || 0;
-
         const gradeB = r.querySelector('.row-grade-b').value;
         const lenB = parseFloat(r.querySelector('.row-len-b').value) || 0;
         const diaB = parseInt(r.querySelector('.row-dia-b').value) || 0;
-
         const qty = parseInt(r.querySelector('.row-qty-input').value) || 0;
 
-        // Volumes per part based on their distinct diameter & length using lookup
         let volA = 0;
         if (diaA > 0 && lenA > 0) {
             const keyA = String(lenA);
@@ -584,28 +564,20 @@ function recalculateAll() {
         }
         const combinedVolSingle = volA + volB;
         const totVol = qty * combinedVolSingle;
-
-        // Dynamic Rates per segment specs using independent diameter A and diameter B
         const rateA = getMatchingRate(cat, lenA, diaA, gradeA);
         const rateB = getMatchingRate(cat, lenB, diaB, gradeB);
-        
-        // Subtotal
         const subtotalA = qty * volA * rateA;
         const subtotalB = qty * volB * rateB;
         const combinedSubtotal = subtotalA + subtotalB;
 
-        // Update row displays
         r.querySelector('.row-vol-single').textContent = combinedVolSingle.toFixed(3);
         r.querySelector('.row-vol-tot').textContent = qty > 0 ? totVol.toFixed(3) : '0.000';
-        
-        // Stacked Rates Micro-Typography showing specific diameter per part
         r.querySelector('.row-rates-display').innerHTML = `
             <div class="flex flex-col text-xs font-mono gap-0.5 text-right whitespace-nowrap">
                 <span><strong class="text-amber-400">A:</strong> ₱ ${rateA.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span class="text-slate-400 text-[11px]">(${diaA}cm)</span></span>
                 <span><strong class="text-sky-400">B:</strong> ₱ ${rateB.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span class="text-slate-400 text-[11px]">(${diaB}cm)</span></span>
             </div>
         `;
-        
         r.querySelector('.row-subtotal').textContent = qty > 0 ? `₱ ${combinedSubtotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : '₱ 0.00';
 
         const volHiddenA = r.querySelector('.row-volume-hidden-a');
@@ -622,164 +594,97 @@ function recalculateAll() {
         if (totVolHiddenB) totVolHiddenB.value = (qty * volB).toFixed(3);
         if (subtotalHiddenB) subtotalHiddenB.value = (qty * volB * rateB).toFixed(2);
 
-        // Split pieces rule: 1 pair = 1 PC
         splitTotalLogs += qty;
         splitTotalVolume += totVol;
         splitGrossAmount += combinedSubtotal;
     });
 
-    const grandTotalLogs = standardTotalLogs + splitTotalLogs;
-    const grandTotalVolume = standardTotalVolume + splitTotalVolume;
-    const grandGrossAmount = standardGrossAmount + splitGrossAmount;
-
-    // Deductions
-    const driversAssistance = parseFloat(document.getElementById('drivers_assistance').value) || 0;
-    const expensesDeduction = parseFloat(document.getElementById('expenses_deduction').value) || 0;
-    const travelPaper = parseFloat(document.getElementById('travel_paper_deduction').value) || 0;
-    const truckingDeduction = parseFloat(document.getElementById('trucking_deduction').value) || 0;
-    const cashAdvance = parseFloat(document.getElementById('cash_advance').value) || 0;
-    const otherDeductionAmount = parseFloat(document.getElementById('other_deduction_amount').value) || 0;
-
-    const totalDeductions = expensesDeduction + travelPaper + truckingDeduction + cashAdvance + otherDeductionAmount;
-    const netPayable = grandGrossAmount - totalDeductions + driversAssistance;
-
     // Update Footers
     document.getElementById('tfootTotalLogs').textContent = Number(standardTotalLogs.toFixed(2)).toString();
     document.getElementById('tfootTotalVol').textContent = standardTotalVolume.toFixed(3);
     document.getElementById('tfootGrossSubtotal').textContent = `₱ ${standardGrossAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
     document.getElementById('tfootSplitTotalLogs').textContent = Number(splitTotalLogs.toFixed(2)).toString();
     document.getElementById('tfootSplitTotalVol').textContent = splitTotalVolume.toFixed(3);
     document.getElementById('tfootSplitGrossSubtotal').textContent = `₱ ${splitGrossAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
-    // Update Summary
-    document.getElementById('summaryTotalLogs').textContent = `${Number(grandTotalLogs.toFixed(2)).toString()} pcs`;
-    document.getElementById('summaryTotalVol').textContent = `${grandTotalVolume.toFixed(3)} m³`;
-    document.getElementById('summaryGrossVal').textContent = `₱ ${grandGrossAmount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    document.getElementById('summaryDeductions').textContent = `- ₱ ${totalDeductions.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    document.getElementById('summaryDriverAssistance').textContent = `+ ₱ ${driversAssistance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    document.getElementById('summaryNetPayable').textContent = `₱ ${netPayable.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 }
 
+// Initialize on DOM ready for scaler mode only
 document.addEventListener('DOMContentLoaded', () => {
-    // AUTO-REFRESH PRICES ON PAGE LOAD (ensures fresh rates from superadmin updates)
+    // Only initialize matrix for scaler mode
+    if ('{{ $mode }}' !== 'scaler') return;
+
+    // Auto-refresh prices on page load
     const autoRefreshPrices = async () => {
         try {
-            const res = await fetch('{{ route('api.price-matrix') }}', { headers: { 'Accept': 'application/json' } });
-            if (!res.ok) throw new Error('Failed to fetch price matrix');
+            const res = await fetch('{{ route("api.price-matrix") }}', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('Failed to fetch');
             const data = await res.json();
-
-            // Replace price matrix and clear rate cache for fresh fetches
             priceMatrix = data;
-            Object.keys(rateCache).forEach(k => delete rateCache[k]); // Clear cache
+            clearRateCache();
             categoryList = Array.from(new Set(data.map(i => (i.category || '').toUpperCase()))).sort();
-
-            // Update selects in existing rows
             document.querySelectorAll('select.row-cat, select.row-cat-select').forEach(sel => {
                 const current = sel.value;
                 sel.innerHTML = categoryList.map(c => `<option value="${c}">${c}</option>`).join('');
                 if (categoryList.includes(current)) sel.value = current;
             });
-
             const refreshedAtSpan = document.getElementById('pricesRefreshedAt');
-            if (refreshedAtSpan) {
-                refreshedAtSpan.textContent = new Date().toLocaleString();
-            }
+            if (refreshedAtSpan) refreshedAtSpan.textContent = new Date().toLocaleString();
             recalculateAll();
         } catch (err) {
-            console.error('Auto-refresh prices failed (will use embedded data):', err);
+            console.error('Auto-refresh failed:', err);
         }
     };
 
-    // Run auto-refresh on page load
     autoRefreshPrices();
-    
-    // Set auto-refresh timer (refresh every 5 minutes to catch superadmin updates)
     setInterval(autoRefreshPrices, 5 * 60 * 1000);
 
-    // Load initial rows for Box 1 (Standard) with default length 2.6m
+    // Load initial rows
+    initialRows.forEach(row => addRow({...row, length: '2.6', isPreset: true}));
     initialRows.forEach(row => addRow({
         category: row.category,
-        grade: row.grade,
-        is_split: false,
-        length: '2.6',
-        diameter: row.diameter,
-        quantity: 0,
-        isPreset: true
+        gradeA: 'Good', lengthA: '1.3', diameterA: row.diameter,
+        gradeB: 'Sawmill', lengthB: '1.3', diameterB: row.diameter,
+        is_split: true, quantity: 0, isPreset: false
     }));
 
-    // Load initial rows for Box 2 (Split) with default Part A = 1.3m Good, Part B = 1.3m Sawmill
-    initialRows.forEach(row => addRow({
-        category: row.category,
-        gradeA: 'Good',
-        lengthA: '1.3',
-        diameterA: row.diameter,
-        gradeB: 'Sawmill',
-        lengthB: '1.3',
-        diameterB: row.diameter,
-        is_split: true,
-        quantity: 0,
-        isPreset: false
-    }));
-
-    document.getElementById('addRowBtn').addEventListener('click', () => addRow({
-        category: defaultCategory,
-        grade: 'Good',
-        is_split: false,
-        length: '2.6',
-        diameter: 20,
-        quantity: 1,
-        isPreset: false
-    }));
-
-    document.getElementById('addSplitRowBtn').addEventListener('click', () => addRow({
-        category: defaultCategory,
-        gradeA: 'Good',
-        lengthA: '1.3',
-        diameterA: 24,
-        gradeB: 'Sawmill',
-        lengthB: '1.3',
-        diameterB: 22,
-        is_split: true,
-        quantity: 1,
-        isPreset: false
-    }));
-
-    document.querySelectorAll('.deduction-input').forEach(input => {
-        input.addEventListener('input', recalculateAll);
-    });
-
-    const otherDeductionLabelInput = document.getElementById('other_deduction_label');
-    if (otherDeductionLabelInput) {
-        otherDeductionLabelInput.addEventListener('input', recalculateAll);
-        otherDeductionLabelInput.addEventListener('change', recalculateAll);
+    // Button listeners
+    const addStandardBtn = document.getElementById('addStandardRowBtn');
+    if (addStandardBtn) {
+        addStandardBtn.addEventListener('click', () => addRow({
+            category: defaultCategory, grade: 'Good', is_split: false,
+            length: '2.6', diameter: 20, quantity: 1, isPreset: false
+        }));
     }
 
-    // Refresh Prices Button (Manual AJAX) - fetch latest price matrix and clear cache
+    const addSplitBtn = document.getElementById('addSplitRowBtn');
+    if (addSplitBtn) {
+        addSplitBtn.addEventListener('click', () => addRow({
+            category: defaultCategory,
+            gradeA: 'Good', lengthA: '1.3', diameterA: 24,
+            gradeB: 'Sawmill', lengthB: '1.3', diameterB: 22,
+            is_split: true, quantity: 1, isPreset: false
+        }));
+    }
+
     const refreshBtn = document.getElementById('refreshPricesBtn');
-    const refreshedAtSpan = document.getElementById('pricesRefreshedAt');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', async () => {
             refreshBtn.disabled = true;
             refreshBtn.textContent = 'Refreshing...';
             try {
-                const res = await fetch('{{ route('api.price-matrix') }}', { headers: { 'Accept': 'application/json' } });
-                if (!res.ok) throw new Error('Failed to fetch price matrix');
+                const res = await fetch('{{ route("api.price-matrix") }}', { headers: { 'Accept': 'application/json' } });
+                if (!res.ok) throw new Error('Failed');
                 const data = await res.json();
-
-                // Replace price matrix data and CLEAR RATE CACHE for fresh fetches
                 priceMatrix = data;
-                Object.keys(rateCache).forEach(k => delete rateCache[k]); // Clear cache to force fresh DB queries
+                clearRateCache();
                 categoryList = Array.from(new Set(data.map(i => (i.category || '').toUpperCase()))).sort();
-
-                // Update selects in existing rows
                 document.querySelectorAll('select.row-cat, select.row-cat-select').forEach(sel => {
                     const current = sel.value;
                     sel.innerHTML = categoryList.map(c => `<option value="${c}">${c}</option>`).join('');
                     if (categoryList.includes(current)) sel.value = current;
                 });
-
-                refreshedAtSpan.textContent = new Date().toLocaleString();
+                const refreshedAtSpan = document.getElementById('pricesRefreshedAt');
+                if (refreshedAtSpan) refreshedAtSpan.textContent = new Date().toLocaleString();
                 recalculateAll();
             } catch (err) {
                 console.error(err);
@@ -792,3 +697,179 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 </script>
+
+{{-- Component View --}}
+<div class="space-y-6">
+    @if($mode === 'scaler')
+        {{-- SCALER MODE: Interactive Matrix with Add/Remove Rows --}}
+        
+        <!-- BOX 1: STANDARD LOGS TALLY MATRIX (Top Card) -->
+        <div class="glass-panel rounded-2xl border border-slate-800 shadow-xl overflow-hidden border-l-4 border-l-emerald-500">
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-emerald-950/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                        <i class="fa-solid fa-cube"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white uppercase tracking-wide">
+                            Box 1: Standard Logs Tally Matrix
+                        </h2>
+                        <p class="text-xs text-emerald-300/80 font-medium">Single log entries with standard dimensions</p>
+                    </div>
+                </div>
+
+                <button type="button" id="addStandardRowBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5">
+                    <i class="fa-solid fa-plus"></i> Add Log Row
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-200 min-w-[900px]">
+                    <thead class="bg-slate-900 text-xs uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-800">
+                        <tr>
+                            <th class="px-3 py-3.5 w-10 text-center">#</th>
+                            <th class="px-3 py-3.5 w-32">Category</th>
+                            <th class="px-3 py-3.5 w-36">Grade</th>
+                            <th class="px-3 py-3.5 w-24">Length</th>
+                            <th class="px-3 py-3.5 w-28">Diameter</th>
+                            <th class="px-3 py-3.5 w-32 text-center">Quantity (pcs)</th>
+                            <th class="px-3 py-3.5 w-28 text-right">Vol/Log (m³)</th>
+                            <th class="px-3 py-3.5 w-28 text-right">Tot Vol (m³)</th>
+                            <th class="px-3 py-3.5 w-32 text-right">Rate (₱/m³)</th>
+                            <th class="px-3 py-3.5 w-36 text-right">Subtotal (₱)</th>
+                            <th class="px-3 py-3.5 w-16 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60" id="standardMatrixBody">
+                        <!-- Rows injected by JS -->
+                    </tbody>
+                    <tfoot class="bg-slate-900/90 font-bold border-t border-slate-700">
+                        <tr>
+                            <td colspan="5" class="px-4 py-3 text-right uppercase text-xs text-slate-400">Standard Matrix Subtotals:</td>
+                            <td class="px-4 py-3 text-center text-emerald-400 text-base font-mono" id="tfootTotalLogs">0</td>
+                            <td class="px-4 py-3"></td>
+                            <td class="px-4 py-3 text-right text-sky-400 font-mono text-base" id="tfootTotalVol">0.0000</td>
+                            <td class="px-4 py-3"></td>
+                            <td class="px-4 py-3 text-right text-amber-400 font-mono text-lg" id="tfootGrossSubtotal">₱ 0.00</td>
+                            <td class="px-4 py-3"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-800 bg-slate-900/30 flex items-center justify-end gap-3">
+                <button type="button" id="refreshPricesBtn" class="text-xs bg-slate-800/60 hover:bg-slate-700 text-amber-300 rounded-xl px-3 py-2">Refresh Prices</button>
+                <span class="text-xs text-slate-400">Last prices refresh: <span id="pricesRefreshedAt">-</span></span>
+            </div>
+        </div>
+
+        <!-- BOX 2: SPLIT LOGS TALLY MATRIX (Bottom Card) -->
+        <div class="glass-panel rounded-2xl border border-slate-800 shadow-xl overflow-hidden border-l-4 border-l-amber-500">
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-amber-950/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                        <i class="fa-solid fa-code-branch"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white uppercase tracking-wide flex items-center gap-2">
+                            <span>Box 2: Split Logs Tally Matrix</span>
+                            <span class="text-xs bg-amber-500/20 text-amber-300 font-mono px-2 py-0.5 rounded border border-amber-500/30">1 Pair = 1 PC</span>
+                        </h2>
+                        <p class="text-xs text-amber-300/80 font-medium">Dual independent diameter inputs for Part A & Part B (Handles trunk taper math; 1 Pair = 1 PC)</p>
+                    </div>
+                </div>
+
+                <button type="button" id="addSplitRowBtn" class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md flex items-center gap-1.5">
+                    <i class="fa-solid fa-plus"></i> Add Split Log Row
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-200 min-w-[1150px]">
+                    <thead class="bg-slate-900 text-xs uppercase tracking-wider text-slate-400 font-semibold border-b border-slate-800">
+                        <tr>
+                            <th class="px-3 py-3.5 w-10 text-center">#</th>
+                            <th class="px-3 py-3.5 w-28">Category</th>
+                            <th class="px-3 py-3.5 w-64">Part A Specs (Grade / Len / Dia)</th>
+                            <th class="px-3 py-3.5 w-64">Part B Specs (Grade / Len / Dia)</th>
+                            <th class="px-3 py-3.5 w-28 text-center">Quantity (pcs)</th>
+                            <th class="px-3 py-3.5 w-28 text-right">Vol/Pair (m³)</th>
+                            <th class="px-3 py-3.5 w-28 text-right">Tot Vol (m³)</th>
+                            <th class="px-3 py-3.5 w-44 text-right">Rates (Part A / B)</th>
+                            <th class="px-3 py-3.5 w-36 text-right">Subtotal (₱)</th>
+                            <th class="px-3 py-3.5 w-16 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60" id="splitMatrixBody">
+                        <!-- Split rows injected by JS -->
+                    </tbody>
+                    <tfoot class="bg-slate-900/90 font-bold border-t border-slate-700">
+                        <tr>
+                            <td colspan="4" class="px-4 py-3 text-right uppercase text-xs text-amber-400">Split Matrix Subtotals (1 Pair = 1 PC):</td>
+                            <td class="px-4 py-3 text-center text-amber-400 text-base font-mono" id="tfootSplitTotalLogs">0</td>
+                            <td class="px-4 py-3"></td>
+                            <td class="px-4 py-3 text-right text-sky-400 font-mono text-base" id="tfootSplitTotalVol">0.0000</td>
+                            <td class="px-4 py-3"></td>
+                            <td class="px-4 py-3 text-right text-amber-400 font-mono text-lg" id="tfootSplitGrossSubtotal">₱ 0.00</td>
+                            <td class="px-4 py-3"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+    @elseif($mode === 'admin')
+        {{-- ADMIN MODE: Read-Only Display with Edit Links --}}
+        
+        <div class="glass-panel p-6 rounded-3xl border border-slate-800 shadow-xl">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold text-white">{{ $title ?? 'Official Price Matrix' }}</h2>
+                <div class="text-xs text-slate-400">Managed by Superadmin</div>
+            </div>
+
+            <div class="overflow-x-auto border border-slate-800 rounded-2xl">
+                <table class="w-full text-left text-xs text-slate-200">
+                    <thead class="bg-slate-900/90 uppercase font-semibold text-slate-400 border-b border-slate-800">
+                        <tr>
+                            <th class="px-4 py-3">CATEGORY</th>
+                            <th class="px-4 py-3">SIZES / BRACKET</th>
+                            <th class="px-4 py-3">LENGTH</th>
+                            <th class="px-4 py-3 text-right">PRICE (₱/M³)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/80">
+                        @forelse($priceMatrices as $pm)
+                            <tr class="hover:bg-slate-800/40 transition-colors">
+                                <td class="px-4 py-3 font-bold text-white uppercase">{{ $pm->category }}</td>
+                                <td class="px-4 py-3 font-mono font-semibold text-slate-300">
+                                    @if($pm->category === 'SAWMILL' || ($pm->dia_min == 0 && $pm->dia_max == 0))
+                                        SM
+                                    @elseif($pm->dia_max >= 999)
+                                        {{ $pm->dia_min }}-UP
+                                    @else
+                                        {{ $pm->dia_min }}-{{ $pm->dia_max }}
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3 text-slate-400">
+                                    @if($pm->length > 0)
+                                        {{ number_format($pm->length, 1) }}m
+                                    @else
+                                        All
+                                    @endif
+                                </td>
+                                <td class="px-4 py-3 text-right font-mono font-bold text-emerald-400">₱ {{ number_format($pm->price_per_cu_m, 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="4" class="px-4 py-6 text-center text-slate-500 italic">No price specs found.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-6 text-xs text-slate-400 border-t border-slate-800 pt-4">
+                <p><strong>Note:</strong> This pricing matrix is managed through the admin panel. All scaler views receive real-time rates from this data.</p>
+            </div>
+        </div>
+    @endif
+</div>

@@ -74,7 +74,8 @@ class PricingService
             ->orderByRaw("category = ? DESC", [$normalizedCategory])
             ->value('price_per_cu_m');
 
-            return $fallbackSawmill !== null ? (float) $fallbackSawmill : 1800.00;
+            // STRICT: Return 0.00 if no sawmill price found - never use hardcoded fallback
+            return $fallbackSawmill !== null ? (float) $fallbackSawmill : 0.00;
         }
 
         // Handle Good grade - exact length match first

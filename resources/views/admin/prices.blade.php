@@ -12,8 +12,9 @@
         <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 rounded-xl bg-slate-800 text-amber-300 text-xs font-semibold hover:bg-slate-700 transition-all">Back to Dashboard</a>
     </div>
 
+    <!-- Category Management Section -->
     <div class="glass-panel p-6 rounded-3xl border border-slate-800 shadow-xl">
-        <h2 class="text-xl font-bold text-white mb-4">Official Price Matrix</h2>
+        <h2 class="text-xl font-bold text-white mb-4">Manage Categories</h2>
 
         <div class="mb-4 flex items-start justify-between gap-4">
             <form method="POST" action="{{ route('admin.categories.store') }}" class="flex items-center gap-2">
@@ -42,49 +43,26 @@
                 </div>
             @endforeach
         </div>
+    </div>
 
-        <div class="overflow-x-auto border border-slate-800 rounded-2xl">
-            <table class="w-full text-left text-xs text-slate-200">
-                <thead class="bg-slate-900/90 uppercase font-semibold text-slate-400 border-b border-slate-800">
-                    <tr>
-                        <th class="px-4 py-3">SIZES / BRACKET</th>
-                        <th class="px-4 py-3">CATEGORY</th>
-                        <th class="px-4 py-3 text-right">PRICE (₱/M³)</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-800/80">
-                    @forelse($priceMatrices as $pm)
-                        <tr class="hover:bg-slate-800/40 transition-colors">
-                            <td class="px-4 py-3 font-mono font-semibold text-slate-300">
-                                @if($pm->category === 'SAWMILL' || ($pm->dia_min == 0 && $pm->dia_max == 0))
-                                    SM
-                                @elseif($pm->dia_max >= 999)
-                                    {{ $pm->dia_min }}-UP
-                                @else
-                                    {{ $pm->dia_min }}-{{ $pm->dia_max }}
-                                @endif
-                            </td>
-                            <td class="px-4 py-3 font-bold text-white uppercase">{{ $pm->category }}</td>
-                            <td class="px-4 py-3 text-right font-mono font-bold text-emerald-400">₱ {{ number_format($pm->price_per_cu_m, 2) }}</td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="3" class="px-4 py-6 text-center text-slate-500 italic">No price specs found.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+    <!-- Unified Pricing Matrix Display Component -->
+    @component('components.pricing-matrix-display', [
+        'mode' => 'admin',
+        'priceMatrices' => $priceMatrices,
+        'categories' => $categories,
+        'title' => 'Official Price Matrix'
+    ])
+    @endcomponent
+
+    <!-- Info Cards -->
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div class="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-950/80">
+            <h3 class="text-sm font-semibold text-white uppercase tracking-wide mb-2">Structure</h3>
+            <p class="text-xs text-slate-400">Prices are stored by category, length, diameter bracket, and per-cubic-meter rate. This pricing matrix is used by scalers to calculate rates in real-time.</p>
         </div>
-
-        <div class="mt-6 grid gap-4 sm:grid-cols-2">
-            <div class="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-950/80">
-                <h3 class="text-sm font-semibold text-white uppercase tracking-wide mb-2">Structure</h3>
-                <p class="text-xs text-slate-400">Prices are stored by category, length, diameter bracket, and per-cubic-meter rate.</p>
-            </div>
-            <div class="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-950/80">
-                <h3 class="text-sm font-semibold text-white uppercase tracking-wide mb-2">Note</h3>
-                <p class="text-xs text-slate-400">This is a read-only view for now; editing should be handled through the Super Admin price matrix form.</p>
-            </div>
+        <div class="glass-panel p-5 rounded-2xl border border-slate-800 bg-slate-950/80">
+            <h3 class="text-sm font-semibold text-white uppercase tracking-wide mb-2">Real-Time Updates</h3>
+            <p class="text-xs text-slate-400">Changes to prices are reflected immediately in all scaler views. The system fetches fresh rates on each page load and every 5 minutes automatically.</p>
         </div>
     </div>
 </div>
