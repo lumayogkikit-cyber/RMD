@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
@@ -171,19 +172,38 @@ class AdminController extends Controller
      */
     public function updatePriceMatrix(Request $request)
     {
+        $rawPrices = $request->input('prices', []);
+
+        $normalizedPrices = [];
+        foreach ($rawPrices as $index => $item) {
+            $id = $item['id'] ?? null;
+            $price = $item['price'] ?? $item['price_per_cu_m'] ?? null;
+
+            if ($id !== null && $price !== null && is_numeric($price)) {
+                $normalizedPrices[$index] = [
+                    'id' => $id,
+                    'price' => (float) $price,
+                ];
+            }
+        }
+
+        $request->merge(['prices' => $normalizedPrices]);
+
         $validated = $request->validate([
             'prices' => 'required|array',
             'prices.*.id' => 'required|exists:price_matrices,id',
             'prices.*.price' => 'required|numeric|min:0',
         ]);
 
-        foreach ($validated['prices'] as $item) {
-            $pm = PriceMatrix::find($item['id']);
-            if ($pm) {
-                $pm->price_per_cu_m = $item['price'];
-                $pm->save();
+        DB::transaction(function () use ($validated) {
+            foreach ($validated['prices'] as $item) {
+                $pm = PriceMatrix::find($item['id']);
+                if ($pm) {
+                    $pm->price_per_cu_m = (float) $item['price'];
+                    $pm->save();
+                }
             }
-        }
+        });
 
         // STRICT: Clear ALL pricing caches immediately - no stale rates for scalers
         PricingService::clearPricingCache();
