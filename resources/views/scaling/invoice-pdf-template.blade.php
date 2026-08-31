@@ -312,7 +312,7 @@
             <td style="width: 33%;">
                 <div class="sig-line"></div>
                 <div class="label uppercase">REVIEWED BY</div>
-                <div class="val">Supplier / Driver</div>
+                <div class="val">{{ $supplierName ?? 'Supplier / Driver' }}</div>
             </td>
             <td style="width: 33%;">
                 <div class="sig-line"></div>
